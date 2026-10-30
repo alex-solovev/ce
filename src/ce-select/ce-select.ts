@@ -27,13 +27,16 @@ export type SearchEventDetail = {
  * @attr multiple - Allows selecting several options.
  * @attr searchable - Adds a text input that filters the options.
  * @attr no-filter - With `searchable`: don't filter, e.g. when the app loads matching options itself.
+ * @attr with-clear - Shows a button that clears the selection. Backspace / Delete remove the last value (multiple) or clear; with Cmd / Ctrl they clear everything. Always on in searchable single mode, like a search field; hide the button with `::part(clear-button)` to opt out.
  * @slot - `ce-option` elements.
  * @slot label - Rich label content. Overrides the `label` attribute.
+ * @slot clear-icon - Replaces the clear button's default icon.
  * @csspart label - The label.
  * @csspart base - The trigger box.
  * @csspart display - The selected options' labels, or the placeholder.
  * @csspart selected-option - One selected option's label, with its value in `data-value`.
  * @csspart input - The search input (searchable only).
+ * @csspart clear-button - The clear button.
  * @csspart chevron - The chevron icon.
  * @csspart listbox - The popup with the options.
  * @csspart no-results - Shown in the popup when a search matches nothing.
@@ -49,6 +52,7 @@ export class CeSelect extends FormControl {
     "name",
     "searchable",
     "no-filter",
+    "with-clear",
   ];
 
   /** Exists from the start, so values set before connecting are kept. */
@@ -133,6 +137,15 @@ export class CeSelect extends FormControl {
     this.toggleAttribute("no-filter", Boolean(value));
   }
 
+  /** Reflects the `with-clear` attribute. */
+  get withClear(): boolean {
+    return this.hasAttribute("with-clear");
+  }
+
+  set withClear(value: boolean) {
+    this.toggleAttribute("with-clear", Boolean(value));
+  }
+
   /** Reflects the `placeholder` attribute. */
   get placeholder(): string {
     return this.getAttribute("placeholder") ?? "";
@@ -167,6 +180,7 @@ export class CeSelect extends FormControl {
     this.#updateDisabled();
     render.label(context);
     render.selection(context);
+    render.clearButton(context);
   }
 
   disconnectedCallback(): void {
@@ -200,6 +214,11 @@ export class CeSelect extends FormControl {
 
     if (name === "label") {
       render.label(context);
+      return;
+    }
+
+    if (name === "with-clear") {
+      render.clearButton(context);
       return;
     }
 
@@ -267,12 +286,15 @@ export class CeSelect extends FormControl {
 
   #setup() {
     const context = render.createContext(this, this.internals, this.#state);
-    const { box, input, listbox } = context.refs;
+    const { box, input, clearButton, listbox } = context.refs;
 
     // On the box only: the input is inside it, so its events bubble here.
     box.addEventListener("keydown", this.#onKeydown);
     box.addEventListener("focusout", this.#onFocusout);
     box.addEventListener("mousedown", this.#onBoxMousedown);
+
+    clearButton.addEventListener("mousedown", this.#onClearMousedown);
+    clearButton.addEventListener("click", this.#onClearClick);
 
     input.addEventListener("input", this.#onSearchInput);
     input.addEventListener("focus", this.#onInputFocus);
@@ -329,6 +351,7 @@ export class CeSelect extends FormControl {
 
     if (changes.has("selection") || changes.has("query") || changes.has("config")) {
       render.input(context);
+      render.clearButton(context);
     }
 
     if (changes.has("config")) {
@@ -439,6 +462,24 @@ export class CeSelect extends FormControl {
       return;
     }
 
+    const inputText = this.#context?.refs.input.value ?? "";
+
+    // with-clear: Backspace / Delete remove the last value (multiple) or
+    // clear; with Cmd / Ctrl they clear everything.
+    const clear = logic.clearForKey(this.#state, event, this.withClear, inputText);
+
+    if (clear === "last") {
+      event.preventDefault();
+      this.#renderUserChange(logic.removeLastSelected(this.#state));
+      return;
+    }
+
+    if (clear === "all") {
+      event.preventDefault();
+      this.#renderUserChange(logic.clearSelection(this.#state));
+      return;
+    }
+
     if (logic.shouldSubmitOnEnter(this.#state, event)) {
       submitImplicitly(this);
       return;
@@ -491,21 +532,26 @@ export class CeSelect extends FormControl {
     const isSearchable = this.#state.config.searchable;
 
     if (key === "Escape") {
-      // Close only the popup, not a surrounding dialog.
+      // Close only the popup, not a surrounding dialog. Erased search text
+      // clears, like Tab or pressing outside.
       event.preventDefault();
       event.stopPropagation();
-      this.#render(logic.closeList(this.#state));
+      this.#renderUserChange(logic.dismiss(this.#state));
       return;
     }
 
-    // Tab lets focus move on. Single: picks the highlighted option first.
-    if (key === "Tab" && isMultiple) {
-      this.#render(logic.closeList(this.#state));
+    // Tab lets focus move on; single usually picks the highlighted option
+    // first. Otherwise it leaves right away (closing, or clearing erased
+    // text), so the list is closed before the browser looks for the next
+    // focusable element: searching an open list of thousands of options for
+    // one takes seconds.
+    if (key === "Tab" && logic.shouldSelectOnTab(this.#state)) {
+      this.#renderUserChange(logic.selectHighlighted(this.#state));
       return;
     }
 
     if (key === "Tab") {
-      this.#renderUserChange(logic.selectHighlighted(this.#state));
+      this.#renderUserChange(logic.dismiss(this.#state));
       return;
     }
 
@@ -620,6 +666,23 @@ export class CeSelect extends FormControl {
     this.#render(logic.openList(this.#state));
   };
 
+  // Pressing the clear button mustn't move focus or count as pressing the box.
+  #onClearMousedown = (event: MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  #onClearClick = () => {
+    const context = this.#context;
+
+    if (!context) {
+      return;
+    }
+
+    this.#renderUserChange(logic.clearSelection(this.#state));
+    render.trigger(context).focus();
+  };
+
   // Pressing in the list mustn't move focus off the trigger.
   #onListboxMousedown = (event: MouseEvent) => {
     event.preventDefault();
@@ -662,12 +725,13 @@ export class CeSelect extends FormControl {
     this.#render(logic.highlightOption(this.#state, option.value));
   };
 
+  // Pressing outside means leaving: like blur, it clears erased search text.
   #onDocumentMousedown = (event: MouseEvent) => {
     if (event.composedPath().includes(this)) {
       return;
     }
 
-    this.#render(logic.closeList(this.#state));
+    this.#renderUserChange(logic.dismiss(this.#state));
   };
 
   #onFocusout = (event: FocusEvent) => {
@@ -678,7 +742,7 @@ export class CeSelect extends FormControl {
     }
 
     // Searchable: leaving with the text erased clears the selection.
-    this.#renderUserChange(logic.blur(this.#state));
+    this.#renderUserChange(logic.dismiss(this.#state));
   };
 }
 

@@ -58,17 +58,18 @@ The component decides which calls are user actions (and fire `input` / `change`)
 | `toggleOption(state, value)`    | User, multiple. Same guards. Add or remove; stays open.                                                                                                   |
 | `selectHighlighted(state)`      | Enter / Space / Tab. `selectOption` or `toggleOption` on the highlighted option; no-op if none.                                                           |
 | `clearSelection(state)`         | User. Empty selection, `query` → `null`.                                                                                                                  |
+| `removeLastSelected(state)`     | User (Backspace / Delete, multiple). Remove the most recently selected value.                                                                             |
 | `openList(state, at?)`          | Ignored if disabled. Highlight: given end (`"first"` / `"last"`), else first selected visible option, else first enabled visible option.                  |
 | `closeList(state)`              | `open = false`, highlight cleared, `query = null`.                                                                                                        |
 | `moveHighlight(state, to)`      | Keyboard. Move among visible enabled options; `next` / `prev` wrap; page moves 10 and clamps. Closed: opens (Home / End at that end).                     |
 | `highlightOption(state, value)` | Hover. Ignored while closed or for disabled options.                                                                                                      |
 | `typeahead(state, text)`        | Plain mode. Component buffers keys (500 ms) and passes the buffer. Highlight the next label starting with it; repeated same char cycles. Opens if closed. |
 | `search(state, text)`           | Searchable. Set `query`, open, highlight first visible enabled match (or `null`).                                                                         |
-| `blur(state)`                   | Close. Searchable single: `query === ""` clears the selection; other text reverts (`query = null`).                                                       |
+| `dismiss(state)`                | Close (Escape, Tab, outside, focus leaving). Searchable single: `query === ""` clears the selection; other text reverts (`query = null`).                 |
 | `setConfig(state, config)`      | `multiple` off → keep first selected. Disabled on → close. `searchable` / `filter` change → `query = null`, fix highlight.                                |
 | `reset(state)`                  | `dirty = false`, selection = `defaultSelected` options (empty → placeholder). Close.                                                                      |
 
-Readers: `visibleOptions`, `displayText`, `formValues`, `formValue(state, name)`, `isSelected`, `hasSelection`, `shouldSubmitOnEnter`, `isPrintable`, `checkInvariants`.
+Readers: `visibleOptions`, `displayText`, `formValues`, `formValue(state, name)`, `isSelected`, `hasSelection`, `shouldSubmitOnEnter`, `shouldShowClear`, `clearForKey`, `isPrintable`, `checkInvariants`.
 
 ### Invariants
 
@@ -139,7 +140,7 @@ Each phase ends with tests passing and a demo update, ready for review.
   - Open: `↓` / `↑` / `Home` / `End` / `PageUp` / `PageDown` move; `Enter` / `Alt+↑` select and close; `Space` selects unless a type-ahead is in progress; `Escape` closes without change and stops propagation; `Tab` selects the highlighted option, closes and lets focus move.
   - **Decisions:** Enter while closed opens (APG), not implicit submit. Tab selects (APG), unlike `wa-select`.
 - Mouse: `mousedown` on the trigger toggles (and keeps focus); options select on `mouseup`, so press-drag-release works; `pointermove` highlights (not `mouseover`, so keyboard scrolling under a still pointer doesn't move it); `mousedown` in the listbox keeps focus on the trigger; `mousedown` outside closes (document listener only while open).
-- Focus leaving the component → `logic.blur`.
+- Focus leaving the component → `logic.dismiss`.
 - Form: `setFormValue(value)` or `null`; reset → `logic.reset`, restore → `logic.setValues`, disabled (attribute or fieldset) → `logic.setConfig`, plus no `tabindex` (not `-1`, which `delegatesFocus` would still focus) and `aria-disabled`.
 - `value` property: `""` when nothing is selected; setting `""` clears.
 - Custom states on the host: `:state(blank)`, `:state(open)`.
@@ -171,17 +172,20 @@ Each phase ends with tests passing and a demo update, ready for review.
 - Input text: while searching, the typed text; otherwise single shows the selected label, multiple stays empty with the `selected-option` spans before it. The placeholder moves to the input when nothing is selected. Focus selects the text.
 - Typing → `logic.search` (opens, filters by case-insensitive label substring, highlights the first match) and a `search` event (`detail: { query }`, bubbles, composed). The inner input's own `input` events are stopped: our `input` / `change` mean "value changed".
 - Keyboard (APG editable combobox): characters, Space, Backspace, Home / End edit the text; ↓ / ↑ / PageUp / PageDown move; Alt+↓ opens; Enter selects (single) or toggles (multiple); Alt+↑, Escape, Tab as in the other modes; Escape restores the label. Enter while closed submits the form (it's a text input). No type-ahead.
-- Blur (`logic.blur`, counts as a user action): erased text clears a single selection (fires `input` / `change`); other text is dropped and the label comes back.
+- Dismiss (`logic.dismiss`, counts as a user action; Escape, Tab, pressing outside, focus leaving): erased text clears a single selection (fires `input` / `change`); other text is dropped and the label comes back.
+- Leaving includes Tab (in single mode with the text erased, Tab doesn't pick the highlighted option: `logic.shouldSelectOnTab`) and pressing outside, which go through `logic.dismiss` too, as does Escape, so erased text clears there as well. Backspace in the erased input clears right away.
 - Mouse: pressing the input opens and places the caret; pressing elsewhere on the box (chevron) toggles.
 - `no-filter`: no built-in filtering; the app replaces options from `search` (server results). The selection and its labels survive.
 - No results: `part="no-results"` row in the popup (not an option, `aria-hidden`). A polite live region announces "N results" / "No results" 300 ms after typing pauses.
 - Performance: filtering is one pass over labels per keystroke (pure JS); only options whose visibility changed get `setView` (`#renderedHidden`); no pass at all when nothing is filtered.
 - Known edge: duplicate-value elements aren't filtered (they're inert anyway).
 
-### Phase 7: clear and polish
+### Phase 7: clear — done
 
-- `with-clear`: reuse `ce-input`'s clear button approach (`mousedown` prevented, not in tab order, label "Clear", `clear-icon` slot, hidden when empty or disabled).
-- Demo page sections for each mode, docs.
+- `with-clear` attribute (reflected): `<button part="clear-button" tabindex="-1" aria-label="Clear">` with a `clear-icon` slot (default `xmark`), before the chevron. Shown while there's a selection or search text (`logic.shouldShowClear`), hidden when disabled. Searchable single is always clearable, like `input type=search` (`logic.isClearable`); opt out by hiding `::part(clear-button)`.
+- Click: `logic.clearSelection` (empties the selection and search text; doesn't open or close the list), `input` + `change` if the selection changed, focus back on the trigger. `mousedown` is prevented and stopped so focus stays and the box doesn't toggle.
+- Keyboard (the button isn't in the tab order), `logic.clearForKey`: Backspace / Delete remove the last selected value in multiple mode (`logic.removeLastSelected`, one per press) and clear the value in single mode; with Cmd (Mac) or Ctrl they clear everything. Not searchable: on the closed list. Searchable: while the input is empty and not being searched, so the keys keep editing text otherwise (single searchable also clears by erasing the text and leaving).
+- No separate `clear` event: `input` / `change` cover it.
 
 ## Corner cases
 
@@ -214,7 +218,7 @@ Kept in mind, not copied:
 - **Mutating user DOM.** It sets `id` on every option (for `aria-activedescendant`) and toggles `hidden` on options, group labels and dividers when filtering, then needs guards against its own slotchange loops. We use `ariaActiveDescendantElement` and custom states instead.
 - **Typing fires `input` on the host**, same event as value changes. We use a separate `search` event.
 - **State spread over flags** (`hasInteracted`, `valueHasChanged`, `hasInputSinceOpening`, `optionValues` cache, `selectionOrder` map) that must be kept in sync by hand. Our logic holds one state object.
-- **Adopted:** select-on-focus, Escape restores the label, blur rules for single mode, Escape `stopPropagation`, `focusin` on the root node, live region for result counts.
+- **Adopted:** select-on-focus, Escape restores typed-over labels, dismiss rules for single mode, Escape `stopPropagation`, `focusin` on the root node, live region for result counts.
 - **Not adopted (for now):** `allowCustomValue`, `allowCreate`, tags, `Backspace` removes last selection, opening on label click, input/change on reset.
 
 ## Out of scope

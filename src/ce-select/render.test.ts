@@ -17,6 +17,8 @@ class TestHost extends HTMLElement {
 
   placeholder = "";
 
+  withClear = false;
+
   get name(): string {
     return this.getAttribute("name") ?? "";
   }
@@ -468,6 +470,46 @@ describe("disabled", () => {
     render.disabled(context);
 
     expect(context.refs.box.hasAttribute("tabindex")).toBe(false);
+  });
+});
+
+describe("clearButton", () => {
+  it("shows with with-clear and a selection, hides otherwise", () => {
+    const { host, context } = setup();
+
+    render.clearButton(context);
+    expect(context.refs.clearButton.hidden).toBe(true);
+
+    logic.setValues(context.state, ["date"]);
+    render.clearButton(context);
+    expect(context.refs.clearButton.hidden).toBe(true);
+
+    host.withClear = true;
+    render.clearButton(context);
+    expect(context.refs.clearButton.hidden).toBe(false);
+
+    logic.setConfig(context.state, { disabled: true });
+    render.clearButton(context);
+    expect(context.refs.clearButton.hidden).toBe(true);
+  });
+
+  it("shows in searchable single mode without with-clear", () => {
+    const { context } = setup(fruits, { searchable: true });
+
+    logic.setValues(context.state, ["date"]);
+    render.clearButton(context);
+
+    expect(context.refs.clearButton.hidden).toBe(false);
+  });
+
+  it("shows for search text without a selection", () => {
+    const { host, context } = setup(fruits, { searchable: true });
+    host.withClear = true;
+
+    logic.search(context.state, "an");
+    render.clearButton(context);
+
+    expect(context.refs.clearButton.hidden).toBe(false);
   });
 });
 

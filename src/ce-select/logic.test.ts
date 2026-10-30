@@ -481,13 +481,13 @@ describe("search", () => {
   });
 });
 
-describe("blur", () => {
+describe("dismiss", () => {
   it("clears a searchable single selection when the text was erased", () => {
     let state = run(withOptions({ searchable: true }), (s) => logic.selectOption(s, "apple"));
     state = run(
       state,
       (s) => logic.search(s, ""),
-      (s) => logic.blur(s),
+      (s) => logic.dismiss(s),
     );
 
     expect(state.selection).toEqual([]);
@@ -499,11 +499,44 @@ describe("blur", () => {
     state = run(
       state,
       (s) => logic.search(s, "ban"),
-      (s) => logic.blur(s),
+      (s) => logic.dismiss(s),
     );
 
     expect(logic.formValues(state)).toEqual(["apple"]);
     expect(state.query).toBe(null);
+  });
+
+  it("keeps a searchable multiple selection when the text was erased", () => {
+    const state = run(
+      withOptions({ searchable: true, multiple: true }),
+      (s) => logic.setValues(s, ["date", "apple"]),
+      (s) => logic.search(s, ""),
+      (s) => logic.dismiss(s),
+    );
+
+    expect(logic.formValues(state)).toEqual(["date", "apple"]);
+    expect(state.open).toBe(false);
+  });
+
+  it("keeps a disabled selection when the text was erased", () => {
+    const state = run(
+      withOptions({ searchable: true }),
+      (s) => logic.setValues(s, ["date"]),
+      (s) => logic.search(s, ""),
+      (s) => logic.setConfig(s, { disabled: true }),
+      (s) => logic.dismiss(s),
+    );
+
+    expect(logic.formValues(state)).toEqual(["date"]);
+  });
+
+  it("marks the clear as a user change", () => {
+    const state = run(withOptions({ searchable: true }), (s) => logic.search(s, ""));
+    state.selection = [{ value: "date", label: "Date" }];
+    const changes = logic.dismiss(state);
+
+    expect(changes.has("selection")).toBe(true);
+    expect(state.dirty).toBe(true);
   });
 
   it("only closes otherwise", () => {
@@ -511,7 +544,7 @@ describe("blur", () => {
       withOptions(),
       (s) => logic.selectOption(s, "apple"),
       (s) => logic.openList(s),
-      (s) => logic.blur(s),
+      (s) => logic.dismiss(s),
     );
 
     expect(logic.formValues(state)).toEqual(["apple"]);
@@ -653,6 +686,173 @@ describe("keys", () => {
   });
 });
 
+describe("with-clear", () => {
+  function key(name: string, modifiers: Partial<logic.KeyInput> = {}): logic.KeyInput {
+    return { key: name, altKey: false, ctrlKey: false, metaKey: false, ...modifiers };
+  }
+
+  it("clearSelection leaves the list open or closed as it was", () => {
+    const open = run(
+      withOptions(),
+      (s) => logic.setValues(s, ["date"]),
+      (s) => logic.openList(s),
+    );
+    const closed = run(withOptions(), (s) => logic.setValues(s, ["date"]));
+
+    run(open, (s) => logic.clearSelection(s));
+    run(closed, (s) => logic.clearSelection(s));
+
+    expect(open.open).toBe(true);
+    expect(open.selection).toEqual([]);
+    expect(closed.open).toBe(false);
+  });
+
+  it("shouldShowClear: with a selection or search text, enabled, and with-clear set", () => {
+    const empty = withOptions({ searchable: true });
+    const selected = run(withOptions(), (s) => logic.setValues(s, ["date"]));
+    const searching = run(withOptions({ searchable: true }), (s) => logic.search(s, "an"));
+    const erased = run(withOptions({ searchable: true }), (s) => logic.search(s, ""));
+    const disabled = run(
+      withOptions(),
+      (s) => logic.setValues(s, ["date"]),
+      (s) => logic.setConfig(s, { disabled: true }),
+    );
+
+    expect(logic.shouldShowClear(empty, true)).toBe(false);
+    expect(logic.shouldShowClear(selected, true)).toBe(true);
+    expect(logic.shouldShowClear(selected, false)).toBe(false);
+    expect(logic.shouldShowClear(searching, true)).toBe(true);
+    expect(logic.shouldShowClear(erased, true)).toBe(false);
+    expect(logic.shouldShowClear(disabled, true)).toBe(false);
+  });
+
+  it("removeLastSelected removes the most recently selected value", () => {
+    const state = run(
+      withOptions({ multiple: true }),
+      (s) => logic.setValues(s, ["date", "apple"]),
+      (s) => logic.removeLastSelected(s),
+    );
+
+    expect(logic.formValues(state)).toEqual(["date"]);
+    expect(state.dirty).toBe(true);
+  });
+
+  it("removeLastSelected does nothing when empty or disabled", () => {
+    const disabled = run(
+      withOptions({ multiple: true }),
+      (s) => logic.setValues(s, ["date"]),
+      (s) => logic.setConfig(s, { disabled: true }),
+    );
+
+    expectNoChange(withOptions({ multiple: true }), (s) => logic.removeLastSelected(s));
+    expectNoChange(disabled, (s) => logic.removeLastSelected(s));
+  });
+
+  it("clearForKey: multiple removes the last value, Cmd / Ctrl clear everything", () => {
+    const state = run(withOptions({ multiple: true }), (s) =>
+      logic.setValues(s, ["date", "apple"]),
+    );
+
+    expect(logic.clearForKey(state, key("Backspace"), true, "")).toBe("last");
+    expect(logic.clearForKey(state, key("Delete"), true, "")).toBe("last");
+    expect(logic.clearForKey(state, key("Backspace", { metaKey: true }), true, "")).toBe("all");
+    expect(logic.clearForKey(state, key("Backspace", { ctrlKey: true }), true, "")).toBe("all");
+    expect(logic.clearForKey(state, key("Backspace", { altKey: true }), true, "")).toBe(null);
+  });
+
+  it("clearForKey: single clears its value", () => {
+    const state = run(withOptions(), (s) => logic.setValues(s, ["date"]));
+
+    expect(logic.clearForKey(state, key("Backspace"), true, "")).toBe("all");
+    expect(logic.clearForKey(state, key("Delete"), true, "")).toBe("all");
+  });
+
+  it("clearForKey: nothing for other keys, without with-clear, while open, empty or disabled", () => {
+    const state = run(withOptions(), (s) => logic.setValues(s, ["date"]));
+    const open = run(
+      withOptions(),
+      (s) => logic.setValues(s, ["date"]),
+      (s) => logic.openList(s),
+    );
+    const disabled = run(
+      withOptions(),
+      (s) => logic.setValues(s, ["date"]),
+      (s) => logic.setConfig(s, { disabled: true }),
+    );
+
+    expect(logic.clearForKey(state, key("Enter"), true, "")).toBe(null);
+    expect(logic.clearForKey(state, key("Delete"), false, "")).toBe(null);
+    expect(logic.clearForKey(open, key("Delete"), true, "")).toBe(null);
+    expect(logic.clearForKey(withOptions(), key("Delete"), true, "")).toBe(null);
+    expect(logic.clearForKey(disabled, key("Delete"), true, "")).toBe(null);
+  });
+
+  it("clearForKey: searchable only while the input is empty and not searching", () => {
+    const multiple = run(withOptions({ searchable: true, multiple: true }), (s) =>
+      logic.setValues(s, ["date"]),
+    );
+    const searching = run(
+      withOptions({ searchable: true, multiple: true }),
+      (s) => logic.setValues(s, ["date"]),
+      (s) => logic.search(s, ""),
+    );
+
+    // Empty input, not searching: open or closed.
+    expect(logic.clearForKey(multiple, key("Backspace"), true, "")).toBe("last");
+    // The input shows text (e.g. the single label): the key edits it.
+    expect(logic.clearForKey(multiple, key("Backspace"), true, "Date")).toBe(null);
+    // Erased a search: Backspace keeps editing, it doesn't remove values.
+    expect(logic.clearForKey(searching, key("Backspace"), true, "")).toBe(null);
+  });
+});
+
+describe("clearing single searchable", () => {
+  function key(name: string): logic.KeyInput {
+    return { key: name, altKey: false, ctrlKey: false, metaKey: false };
+  }
+
+  it("shouldSelectOnTab: single picks the highlight, except with erased search text", () => {
+    const plain = run(withOptions(), (s) => logic.openList(s));
+    const typed = run(withOptions({ searchable: true }), (s) => logic.search(s, "an"));
+    const erased = run(withOptions({ searchable: true }), (s) => logic.search(s, ""));
+    const multiple = run(withOptions({ multiple: true }), (s) => logic.openList(s));
+
+    expect(logic.shouldSelectOnTab(plain)).toBe(true);
+    expect(logic.shouldSelectOnTab(typed)).toBe(true);
+    expect(logic.shouldSelectOnTab(erased)).toBe(false);
+    expect(logic.shouldSelectOnTab(multiple)).toBe(false);
+  });
+
+  it("clearForKey: Backspace in the erased input clears the single value, even without with-clear", () => {
+    const state = run(
+      withOptions({ searchable: true }),
+      (s) => logic.setValues(s, ["date"]),
+      (s) => logic.search(s, ""),
+    );
+
+    expect(logic.clearForKey(state, key("Backspace"), true, "")).toBe("all");
+    expect(logic.clearForKey(state, key("Backspace"), false, "")).toBe("all");
+  });
+
+  it("isClearable: with-clear, or always in searchable single mode", () => {
+    expect(logic.isClearable(withOptions(), false)).toBe(false);
+    expect(logic.isClearable(withOptions(), true)).toBe(true);
+    expect(logic.isClearable(withOptions({ searchable: true }), false)).toBe(true);
+    expect(logic.isClearable(withOptions({ searchable: true, multiple: true }), false)).toBe(false);
+    expect(logic.isClearable(withOptions({ searchable: true, multiple: true }), true)).toBe(true);
+  });
+
+  it("shouldShowClear: searchable single shows without with-clear", () => {
+    const selected = run(withOptions({ searchable: true }), (s) => logic.setValues(s, ["date"]));
+    const multiple = run(withOptions({ searchable: true, multiple: true }), (s) =>
+      logic.setValues(s, ["date"]),
+    );
+
+    expect(logic.shouldShowClear(selected, false)).toBe(true);
+    expect(logic.shouldShowClear(multiple, false)).toBe(false);
+  });
+});
+
 describe("random call sequences", () => {
   /** Small seeded PRNG (mulberry32), so failures are reproducible. */
   function createRandom(seed: number): () => number {
@@ -694,13 +894,14 @@ describe("random call sequences", () => {
       "toggleOption",
       "selectHighlighted",
       "clearSelection",
+      "removeLastSelected",
       "openList",
       "closeList",
       "moveHighlight",
       "highlightOption",
       "typeahead",
       "search",
-      "blur",
+      "dismiss",
       "setConfig",
       "reset",
     ] as const);
@@ -751,6 +952,8 @@ describe("random call sequences", () => {
         return step("selectHighlighted()", true, (s) => logic.selectHighlighted(s));
       case "clearSelection":
         return step("clearSelection()", true, (s) => logic.clearSelection(s));
+      case "removeLastSelected":
+        return step("removeLastSelected()", true, (s) => logic.removeLastSelected(s));
       case "openList": {
         const at = pick([undefined, "first", "last"] as const);
         return step(`openList(${at ?? ""})`, true, (s) => logic.openList(s, at));
@@ -773,8 +976,8 @@ describe("random call sequences", () => {
         const text = pick(["", "a", "an", "zzz"]);
         return step(`search("${text}")`, true, (s) => logic.search(s, text));
       }
-      case "blur":
-        return step("blur()", false, (s) => logic.blur(s));
+      case "dismiss":
+        return step("dismiss()", false, (s) => logic.dismiss(s));
       case "setConfig": {
         const name = pick(["multiple", "searchable", "filter", "disabled"] as const);
         const config: Partial<Config> = { [name]: random() < 0.5 };

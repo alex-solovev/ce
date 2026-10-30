@@ -71,6 +71,19 @@ template.innerHTML = `
 
     [part="input"][hidden] { display: none; }
 
+    [part="clear-button"] {
+      display: flex;
+      flex: none;
+      padding: 0;
+      border: 0;
+      background: none;
+      color: inherit;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    [part="clear-button"][hidden] { display: none; }
+
     [part="chevron"] { flex: none; }
     :host(:state(open)) [part="chevron"] { rotate: 180deg; }
 
@@ -115,6 +128,9 @@ template.innerHTML = `
       autocapitalize="off"
       spellcheck="false"
     />
+    <button part="clear-button" type="button" tabindex="-1" aria-label="Clear" hidden>
+      <slot name="clear-icon"><ce-icon name="xmark"></ce-icon></slot>
+    </button>
     <ce-icon part="chevron" name="chevron-down"></ce-icon>
   </div>
   <div part="listbox" id="listbox" role="listbox" popover="manual" tabindex="-1">
@@ -136,6 +152,8 @@ export type SelectRefs = {
   display: HTMLElement;
   /** The combobox when searchable. */
   input: HTMLInputElement;
+  /** `with-clear` only; not in the tab order (Delete / Backspace clear instead). */
+  clearButton: HTMLButtonElement;
   listbox: HTMLElement;
   noResults: HTMLElement;
   liveRegion: HTMLElement;
@@ -197,6 +215,7 @@ export function collectRefs(root: ShadowRoot): SelectRefs {
     box: requireElement(root, "[part='base']", HTMLElement),
     display: requireElement(root, "[part='display']", HTMLElement),
     input: requireElement(root, "[part='input']", HTMLInputElement),
+    clearButton: requireElement(root, "[part='clear-button']", HTMLButtonElement),
     listbox: requireElement(root, "[part='listbox']", HTMLElement),
     noResults: requireElement(root, "[part='no-results']", HTMLElement),
     liveRegion: requireElement(root, "[aria-live]", HTMLElement),
@@ -479,6 +498,11 @@ export function disabled(context: SelectContext): void {
   }
 
   refs.box.tabIndex = 0;
+}
+
+/** `with-clear`: shown while there's a selection or search text to clear. */
+export function clearButton(context: SelectContext): void {
+  context.refs.clearButton.hidden = !logic.shouldShowClear(context.state, context.host.withClear);
 }
 
 export function multiple(context: SelectContext): void {

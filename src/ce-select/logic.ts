@@ -218,6 +218,18 @@ export function selectHighlighted(state: State, changes: Changes = new Set()): C
   return selectOption(state, highlighted, changes);
 }
 
+/** User removes the most recently selected value (Backspace in multiple mode). */
+export function removeLastSelected(state: State, changes: Changes = new Set()): Changes {
+  if (state.config.disabled || !hasSelection(state)) {
+    return changes;
+  }
+
+  set(state, changes, "selection", state.selection.slice(0, -1));
+  set(state, changes, "dirty", true);
+
+  return changes;
+}
+
 export function clearSelection(state: State, changes: Changes = new Set()): Changes {
   if (state.config.disabled) {
     return changes;
@@ -365,10 +377,13 @@ export function search(state: State, text: string, changes: Changes = new Set())
   return changes;
 }
 
-/** Focus left the component. */
-export function blur(state: State, changes: Changes = new Set()): Changes {
-  // Searchable single: erasing the text and leaving clears the selection.
-  // Any other typed text is dropped, so the input shows the selection again.
+/**
+ * The user leaves the list: Escape, Tab, pressing outside, or focus moving
+ * away. Closes it, and in searchable single mode settles the typed text:
+ * erased text clears the selection; anything else (a search that went
+ * nowhere) is dropped, so the input shows the selected label again.
+ */
+export function dismiss(state: State, changes: Changes = new Set()): Changes {
   const shouldClear =
     state.config.searchable &&
     !state.config.multiple &&
@@ -504,6 +519,91 @@ export function hasSelection(state: State): boolean {
 /** A searchable select is a text input: closed, Enter submits the form like a native one. */
 export function shouldSubmitOnEnter(state: State, key: KeyInput): boolean {
   return key.key === "Enter" && state.config.searchable && !state.open;
+}
+
+/**
+ * Tab while open picks the highlighted option (APG), except in searchable
+ * single mode with the text erased: there, leaving clears the selection.
+ */
+export function shouldSelectOnTab(state: State): boolean {
+  if (state.config.multiple) {
+    return false;
+  }
+
+  return !(state.config.searchable && state.query === "");
+}
+
+/**
+ * Whether the select offers clearing (button and keys): with `with-clear`,
+ * and always in searchable single mode, which works like a search field.
+ */
+export function isClearable(state: State, withClear: boolean): boolean {
+  return withClear || (state.config.searchable && !state.config.multiple);
+}
+
+/** The clear button shows while there's something to clear. */
+export function shouldShowClear(state: State, withClear: boolean): boolean {
+  if (!isClearable(state, withClear) || state.config.disabled) {
+    return false;
+  }
+
+  const hasText = state.query !== null && state.query !== "";
+
+  return hasSelection(state) || hasText;
+}
+
+/** What a clearing key removes: the last selected value, or all of them. */
+export type KeyClear = "last" | "all";
+
+/**
+ * Clearing keys (see `isClearable`), so keyboard users can clear without
+ * reaching the button (it isn't in the tab order):
+ *
+ * - Backspace / Delete: multiple removes the last selected value, one per
+ *   press; single clears its value.
+ * - With Cmd (Mac) or Ctrl: clears everything.
+ *
+ * Not searchable: on the closed list. Searchable: only while the input is
+ * empty, so the keys keep editing the text otherwise; multiple also not
+ * right after erasing a search (Backspace there means "keep erasing").
+ *
+ * @param inputText What the search input currently shows.
+ */
+export function clearForKey(
+  state: State,
+  key: KeyInput,
+  withClear: boolean,
+  inputText: string,
+): KeyClear | null {
+  if (!isClearable(state, withClear) || state.config.disabled || !hasSelection(state)) {
+    return null;
+  }
+
+  if (key.key !== "Delete" && key.key !== "Backspace") {
+    return null;
+  }
+
+  if (key.altKey) {
+    return null;
+  }
+
+  if (!state.config.searchable && state.open) {
+    return null;
+  }
+
+  if (state.config.searchable && inputText !== "") {
+    return null;
+  }
+
+  if (state.config.searchable && state.config.multiple && state.query !== null) {
+    return null;
+  }
+
+  if (key.metaKey || key.ctrlKey || !state.config.multiple) {
+    return "all";
+  }
+
+  return "last";
 }
 
 /** A key that types a character (type-ahead or search). */

@@ -1630,4 +1630,294 @@ describe("ce-select", () => {
       views.restore();
     });
   });
+  describe("with-clear", () => {
+    function clearButton(select: CeSelect): HTMLButtonElement {
+      return queryShadow<HTMLButtonElement>(select, "[part='clear-button']");
+    }
+
+    it("is hidden without with-clear or without a selection", () => {
+      const { select } = render(`<ce-select name="fruit">${fruits}</ce-select>`);
+      const { select: withClear } = render(
+        `<ce-select name="other" with-clear>${fruits}</ce-select>`,
+      );
+
+      select.value = "date";
+
+      expect(clearButton(select).hidden).toBe(true);
+      expect(clearButton(withClear).hidden).toBe(true);
+
+      withClear.value = "date";
+
+      expect(clearButton(withClear).hidden).toBe(false);
+    });
+
+    it("clears, fires events and focuses the trigger without opening the list", async () => {
+      const { form, select, events } = render(
+        `<ce-select name="fruit" with-clear>${fruits}</ce-select>`,
+      );
+
+      select.value = "date";
+      await userEvent.click(clearButton(select));
+
+      expect(select.value).toBe("");
+      expect(new FormData(form).has("fruit")).toBe(false);
+      expect(events).toEqual(["input", "change"]);
+      expect(isOpen(select)).toBe(false);
+      expect(select.shadowRoot?.activeElement).toBe(trigger(select));
+      expect(clearButton(select).hidden).toBe(true);
+    });
+
+    it("clears every value in multiple mode", async () => {
+      const { select } = render(
+        `<ce-select name="fruit" multiple with-clear>${fruits}</ce-select>`,
+      );
+
+      select.values = ["apple", "date"];
+      await userEvent.click(clearButton(select));
+
+      expect(select.values).toEqual([]);
+      expect(selectedSpans(select)).toEqual([]);
+    });
+
+    it("clears typed search text even without a selection", async () => {
+      const { select, events } = render(
+        `<ce-select name="fruit" searchable with-clear>${fruits}</ce-select>`,
+      );
+
+      await focusAndType(select, "an");
+      expect(clearButton(select).hidden).toBe(false);
+
+      await userEvent.click(clearButton(select));
+
+      expect(searchInput(select).value).toBe("");
+      expect(shownValues(select)).toEqual(["apple", "banana", "cherry", "date"]);
+      expect(events).toEqual([]);
+    });
+
+    it("is hidden while disabled", () => {
+      const { select } = render(
+        `<ce-select name="fruit" with-clear disabled>${fruits}</ce-select>`,
+      );
+
+      select.value = "date";
+
+      expect(clearButton(select).hidden).toBe(true);
+    });
+
+    it("follows the with-clear attribute", () => {
+      const { select } = render(`<ce-select name="fruit">${fruits}</ce-select>`);
+
+      select.value = "date";
+      select.withClear = true;
+      expect(clearButton(select).hidden).toBe(false);
+
+      select.withClear = false;
+      expect(clearButton(select).hidden).toBe(true);
+    });
+
+    it("clears on Delete and Backspace while closed", async () => {
+      const { select, events } = render(`<ce-select name="fruit" with-clear>${fruits}</ce-select>`);
+
+      select.value = "date";
+      await focusAndPress(select, "{Delete}");
+      expect(select.value).toBe("");
+
+      select.value = "apple";
+      await userEvent.keyboard("{Backspace}");
+      expect(select.value).toBe("");
+
+      expect(events).toEqual(["input", "change", "input", "change"]);
+    });
+
+    it("removes one value per Backspace / Delete in multiple mode", async () => {
+      const { select, events } = render(
+        `<ce-select name="fruit" multiple with-clear>${fruits}</ce-select>`,
+      );
+
+      select.values = ["apple", "date", "banana"];
+      await focusAndPress(select, "{Backspace}");
+      expect(select.values).toEqual(["apple", "date"]);
+
+      await userEvent.keyboard("{Delete}");
+      expect(select.values).toEqual(["apple"]);
+
+      expect(events).toEqual(["input", "change", "input", "change"]);
+    });
+
+    it("clears every value with Cmd or Ctrl + Backspace in multiple mode", async () => {
+      const { select } = render(
+        `<ce-select name="fruit" multiple with-clear>${fruits}</ce-select>`,
+      );
+
+      select.values = ["apple", "date"];
+      await focusAndPress(select, "{Meta>}{Backspace}{/Meta}");
+      expect(select.values).toEqual([]);
+
+      select.values = ["apple", "date"];
+      await userEvent.keyboard("{Control>}{Backspace}{/Control}");
+      expect(select.values).toEqual([]);
+    });
+
+    it("doesn't clear on Delete without with-clear", async () => {
+      const { select } = render(`<ce-select name="fruit">${fruits}</ce-select>`);
+
+      select.value = "date";
+      await focusAndPress(select, "{Delete}");
+
+      expect(select.value).toBe("date");
+    });
+
+    it("searchable multiple: Backspace in the empty input removes the last value", async () => {
+      const { select } = render(
+        `<ce-select name="fruit" searchable multiple with-clear>${fruits}</ce-select>`,
+      );
+
+      select.values = ["apple", "date"];
+      await focusAndType(select, "{Backspace}");
+
+      expect(select.values).toEqual(["apple"]);
+      expect(selectedSpans(select)).toEqual(["apple:Apple"]);
+    });
+
+    it("searchable: Backspace edits the text instead of clearing", async () => {
+      const { select } = render(
+        `<ce-select name="fruit" searchable multiple with-clear>${fruits}</ce-select>`,
+      );
+
+      select.values = ["date"];
+      await focusAndType(select, "ap{Backspace}{Backspace}{Backspace}");
+
+      expect(select.values).toEqual(["date"]);
+      expect(searchInput(select).value).toBe("");
+    });
+
+    it("uses a slotted clear icon", () => {
+      const { select } = render(`
+        <ce-select name="fruit" with-clear>
+          <span slot="clear-icon">×</span>
+          ${fruits}
+        </ce-select>
+      `);
+      const slot = queryShadow<HTMLSlotElement>(select, "slot[name='clear-icon']");
+
+      expect(slot.assignedElements()).toEqual([query(select, "[slot='clear-icon']")]);
+    });
+  });
+  describe("clearing single searchable", () => {
+    it("clears when the text is erased and Tab moves on", async () => {
+      const { form, select, events } = render(
+        `<ce-select name="fruit" searchable>${fruits}</ce-select>`,
+      );
+      const other = document.createElement("input");
+      form.append(other);
+
+      select.value = "banana";
+      await focusAndType(select, "{Backspace}{Tab}");
+
+      expect(select.value).toBe("");
+      expect(searchInput(select).value).toBe("");
+      expect(events).toEqual(["input", "change"]);
+    });
+
+    it("clears when the text is erased and the page is pressed elsewhere", async () => {
+      const { form, select } = render(`<ce-select name="fruit" searchable>${fruits}</ce-select>`);
+      const outside = document.createElement("p");
+      outside.textContent = "Outside";
+      // Above the select, so the open list doesn't cover it.
+      form.prepend(outside);
+
+      select.value = "banana";
+      await focusAndType(select, "{Backspace}");
+      await userEvent.click(outside);
+
+      expect(select.value).toBe("");
+      expect(searchInput(select).value).toBe("");
+    });
+
+    it("clears with the clear button", async () => {
+      const { select } = render(
+        `<ce-select name="fruit" searchable with-clear>${fruits}</ce-select>`,
+      );
+
+      select.value = "banana";
+      await userEvent.click(queryShadow(select, "[part='clear-button']"));
+
+      expect(select.value).toBe("");
+      expect(searchInput(select).value).toBe("");
+    });
+
+    it("clears on Backspace in the erased input with with-clear", async () => {
+      const { select } = render(
+        `<ce-select name="fruit" searchable with-clear>${fruits}</ce-select>`,
+      );
+
+      select.value = "banana";
+      await focusAndType(select, "{Backspace}{Backspace}");
+
+      expect(select.value).toBe("");
+    });
+
+    it("closes the list on Tab before focus moves", () => {
+      const { select } = render(`<ce-select name="fruit" searchable>${fruits}</ce-select>`);
+      const input = searchInput(select);
+
+      select.value = "banana";
+      input.focus();
+      input.value = "";
+      input.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true }));
+      expect(isOpen(select)).toBe(true);
+
+      // The keydown alone, before any focus change: the list must already be
+      // closed, or the browser searches every open option for the next
+      // focusable element.
+      trigger(select).dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+
+      expect(isOpen(select)).toBe(false);
+      expect(select.value).toBe("");
+    });
+
+    it("closes a multiple list on Tab before focus moves", async () => {
+      const { select } = render(`<ce-select name="fruit" multiple>${fruits}</ce-select>`);
+
+      await focusAndPress(select, "{ArrowDown}");
+      trigger(select).dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+
+      expect(isOpen(select)).toBe(false);
+    });
+
+    it("clears when the text is erased and Escape closes the list", async () => {
+      const { select, events } = render(`<ce-select name="fruit" searchable>${fruits}</ce-select>`);
+
+      select.value = "banana";
+      await focusAndType(select, "{Backspace}{Escape}");
+
+      expect(isOpen(select)).toBe(false);
+      expect(select.value).toBe("");
+      expect(searchInput(select).value).toBe("");
+      expect(events).toEqual(["input", "change"]);
+    });
+
+    it("shows the clear button without with-clear", async () => {
+      const { select } = render(`<ce-select name="fruit" searchable>${fruits}</ce-select>`);
+      const button = queryShadow<HTMLButtonElement>(select, "[part='clear-button']");
+
+      expect(button.hidden).toBe(true);
+
+      select.value = "banana";
+      expect(button.hidden).toBe(false);
+
+      await userEvent.click(button);
+
+      expect(select.value).toBe("");
+    });
+
+    it("clears on Backspace in the erased input without with-clear", async () => {
+      const { select } = render(`<ce-select name="fruit" searchable>${fruits}</ce-select>`);
+
+      select.value = "banana";
+      await focusAndType(select, "{Backspace}{Backspace}");
+
+      expect(select.value).toBe("");
+    });
+  });
 });
