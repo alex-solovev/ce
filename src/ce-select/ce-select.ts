@@ -7,10 +7,18 @@ import {
   updateFieldLabel,
 } from "../core/field-label.ts";
 import { FormControl } from "../core/form-control.ts";
+import { submitImplicitly } from "../core/implicit-submit.ts";
 import { createTypeaheadBuffer, navigationKey, pushTypeahead } from "../core/list-navigation.ts";
 import { CeOption } from "./ce-option.ts";
 import type { OptionView } from "./ce-option.ts";
-import { createState, displayText, formValues, isSelected, reduce } from "./select-state.ts";
+import {
+  createState,
+  displayText,
+  formValues,
+  isSelected,
+  reduce,
+  visibleOptions,
+} from "./select-state.ts";
 import type { Action, Field, Option, State } from "./select-state.ts";
 
 const template = document.createElement("template");
@@ -37,7 +45,12 @@ template.innerHTML = `
       user-select: none;
     }
 
-    [part="base"]:focus-visible { outline: 2px solid AccentColor; outline-offset: 1px; }
+    [part="base"]:focus-visible,
+    [part="base"]:has([part="input"]:focus) {
+      outline: 2px solid AccentColor;
+      outline-offset: 1px;
+    }
+
     :host(:disabled) [part="base"] { opacity: 0.5; }
 
     [part="display"] {
@@ -48,9 +61,27 @@ template.innerHTML = `
       text-overflow: ellipsis;
     }
 
+    /* Searchable: the display only holds the spans, the input takes the rest. */
+    :host(:state(searchable)) [part="display"] { flex: 0 1 auto; }
+    [part="display"][hidden] { display: none; }
+
     :host(:state(blank)) [part="display"] { opacity: 0.6; }
 
     [part="selected-option"]:not(:last-child)::after { content: ", "; }
+
+    [part="input"] {
+      flex: 1;
+      min-width: 4em;
+      padding: 0;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      cursor: text;
+    }
+
+    [part="input"][hidden] { display: none; }
 
     [part="chevron"] { flex: none; }
     :host(:state(open)) [part="chevron"] { rotate: 180deg; }
@@ -72,46 +103,86 @@ template.innerHTML = `
       background: Canvas;
       color: CanvasText;
     }
+
+    [part="no-results"] { padding: 0.375em 0.5em; opacity: 0.75; }
+    [part="no-results"][hidden] { display: none; }
+
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
   </style>
   ${labelMarkup}
-  <div
-    part="base"
-    role="combobox"
-    tabindex="0"
-    aria-haspopup="listbox"
-    aria-expanded="false"
-    aria-controls="listbox"
-  >
+  <div part="base">
     <span part="display"></span>
+    <input
+      part="input"
+      type="text"
+      hidden
+      autocomplete="off"
+      autocapitalize="off"
+      spellcheck="false"
+    />
     <ce-icon part="chevron" name="chevron-down"></ce-icon>
   </div>
   <div part="listbox" id="listbox" role="listbox" popover="manual" tabindex="-1">
+    <div part="no-results" aria-hidden="true" hidden>No results</div>
     <slot></slot>
   </div>
+  <div class="visually-hidden" aria-live="polite"></div>
 `;
 
 /** Attributes of `ce-option` that the select reads. */
 const OPTION_ATTRIBUTES = ["value", "disabled", "selected"];
 
+/** How long typing has to pause before the result count is announced. */
+const ANNOUNCE_DELAY = 300;
+
+/** Attributes the combobox role needs, moved between the two triggers. */
+const TRIGGER_ATTRIBUTES = ["role", "aria-haspopup", "aria-controls", "aria-expanded"];
+
+export type SearchEventDetail = {
+  query: string;
+};
+
 /**
- * Select (WAI-ARIA select-only combobox), single or `multiple`. Options are
+ * Select, single or `multiple`, optionally `searchable`. Options are
  * `ce-option` children.
+ *
+ * Follows the WAI-ARIA combobox pattern: select-only by default, editable
+ * with a text input when searchable.
  *
  * @attr placeholder - Shown when nothing is selected.
  * @attr multiple - Allows selecting several options.
+ * @attr searchable - Adds a text input that filters the options.
+ * @attr no-filter - With `searchable`: don't filter, e.g. when the app loads matching options itself.
  * @slot - `ce-option` elements.
  * @slot label - Rich label content. Overrides the `label` attribute.
  * @csspart label - The label.
  * @csspart base - The trigger box.
  * @csspart display - The selected options' labels, or the placeholder.
  * @csspart selected-option - One selected option's label, with its value in `data-value`.
+ * @csspart input - The search input (searchable only).
  * @csspart chevron - The chevron icon.
  * @csspart listbox - The popup with the options.
+ * @csspart no-results - Shown in the popup when a search matches nothing.
  * @fires input - When the user changes the selection.
  * @fires change - When the user changes the selection.
+ * @fires search - When the user edits the search text. `detail.query` holds it.
  */
 export class CeSelect extends FormControl {
-  static observedAttributes: string[] = ["placeholder", "label", "multiple", "name"];
+  static observedAttributes: string[] = [
+    "placeholder",
+    "label",
+    "multiple",
+    "name",
+    "searchable",
+    "no-filter",
+  ];
 
   #initialized = false;
 
@@ -119,11 +190,21 @@ export class CeSelect extends FormControl {
 
   #typeahead = createTypeaheadBuffer();
 
-  #trigger: HTMLElement | null = null;
+  /** The trigger box: anchor for the popup and the focusable combobox when not searchable. */
+  #box: HTMLElement | null = null;
 
   #display: HTMLElement | null = null;
 
+  /** The focusable combobox when searchable. */
+  #input: HTMLInputElement | null = null;
+
   #listbox: HTMLElement | null = null;
+
+  #noResults: HTMLElement | null = null;
+
+  #liveRegion: HTMLElement | null = null;
+
+  #announceTimer: ReturnType<typeof setTimeout> | undefined;
 
   /**
    * Option elements by value; the first one for duplicate values. Rebuilt
@@ -140,6 +221,9 @@ export class CeSelect extends FormControl {
   #renderedSelection = new Set<string>();
 
   #renderedMultiple = false;
+
+  /** Values hidden by the search filter. */
+  #renderedHidden = new Set<string>();
 
   /** Reports option changes: added, removed, edited text or attributes. */
   #observer = new MutationObserver((records) => {
@@ -193,6 +277,24 @@ export class CeSelect extends FormControl {
     this.toggleAttribute("multiple", Boolean(value));
   }
 
+  /** Reflects the `searchable` attribute. */
+  get searchable(): boolean {
+    return this.hasAttribute("searchable");
+  }
+
+  set searchable(value: boolean) {
+    this.toggleAttribute("searchable", Boolean(value));
+  }
+
+  /** Reflects the `no-filter` attribute. */
+  get noFilter(): boolean {
+    return this.hasAttribute("no-filter");
+  }
+
+  set noFilter(value: boolean) {
+    this.toggleAttribute("no-filter", Boolean(value));
+  }
+
   /** Reflects the `placeholder` attribute. */
   get placeholder(): string {
     return this.getAttribute("placeholder") ?? "";
@@ -216,7 +318,8 @@ export class CeSelect extends FormControl {
       attributeFilter: OPTION_ATTRIBUTES,
     });
 
-    this.#dispatch({ type: "CONFIG", config: { multiple: this.multiple } });
+    this.#dispatch({ type: "CONFIG", config: this.#configFromAttributes() });
+    this.#applyTrigger();
     this.#syncOptions();
     this.#updateDisabled();
     this.#updateLabel();
@@ -225,6 +328,7 @@ export class CeSelect extends FormControl {
 
   disconnectedCallback(): void {
     this.#observer.disconnect();
+    clearTimeout(this.#announceTimer);
     this.#dispatch({ type: "CLOSE" });
   }
 
@@ -247,8 +351,23 @@ export class CeSelect extends FormControl {
       return;
     }
 
-    if (name === "multiple") {
-      this.#dispatch({ type: "CONFIG", config: { multiple: this.multiple } });
+    if (name === "multiple" || name === "no-filter") {
+      this.#dispatch({ type: "CONFIG", config: this.#configFromAttributes() });
+      return;
+    }
+
+    if (name === "searchable") {
+      // Before the switch: taking the role away from the focused trigger blurs it.
+      const hadFocus = this.matches(":focus-within");
+
+      this.#dispatch({ type: "CONFIG", config: this.#configFromAttributes() });
+      this.#applyTrigger();
+      this.#updateLabel();
+
+      if (hadFocus) {
+        this.#trigger?.focus();
+      }
+
       return;
     }
 
@@ -299,22 +418,48 @@ export class CeSelect extends FormControl {
     const root = this.attachShadow({ mode: "open", delegatesFocus: true });
     root.append(template.content.cloneNode(true));
 
-    const trigger = requireElement(root, "[part='base']", HTMLElement);
+    const box = requireElement(root, "[part='base']", HTMLElement);
+    const input = requireElement(root, "[part='input']", HTMLInputElement);
     const listbox = requireElement(root, "[part='listbox']", HTMLElement);
 
-    trigger.addEventListener("keydown", this.#onKeydown);
-    trigger.addEventListener("mousedown", this.#onTriggerMousedown);
-    trigger.addEventListener("focusout", this.#onFocusout);
+    // On the box only: the input is inside it, so its events bubble here.
+    box.addEventListener("keydown", this.#onKeydown);
+    box.addEventListener("focusout", this.#onFocusout);
+    box.addEventListener("mousedown", this.#onBoxMousedown);
+    input.addEventListener("input", this.#onSearchInput);
+    input.addEventListener("focus", this.#onInputFocus);
 
     listbox.addEventListener("mousedown", this.#onListboxMousedown);
     listbox.addEventListener("mouseup", this.#onListboxMouseup);
     listbox.addEventListener("pointermove", this.#onListboxPointermove);
 
-    this.#trigger = trigger;
+    this.#box = box;
+    this.#input = input;
     this.#display = requireElement(root, "[part='display']", HTMLElement);
     this.#listbox = listbox;
+    this.#noResults = requireElement(root, "[part='no-results']", HTMLElement);
+    this.#liveRegion = requireElement(root, "[aria-live]", HTMLElement);
 
-    setupFieldLabel(this, root, trigger);
+    setupFieldLabel(this, root, () => {
+      this.#updateLabel();
+    });
+  }
+
+  #configFromAttributes() {
+    return {
+      multiple: this.multiple,
+      searchable: this.searchable,
+      filter: !this.noFilter,
+    };
+  }
+
+  /** The focusable combobox element: the input when searchable, otherwise the box. */
+  get #trigger(): HTMLElement | null {
+    if (this.#state.config.searchable) {
+      return this.#input;
+    }
+
+    return this.#box;
   }
 
   /**
@@ -358,6 +503,14 @@ export class CeSelect extends FormControl {
       this.#renderHighlightChange();
     }
 
+    if (changes.has("query") || changes.has("config")) {
+      this.#renderFilter(!optionsChanged);
+    }
+
+    if (changes.has("selection") || changes.has("query") || changes.has("config")) {
+      this.#renderInput();
+    }
+
     if (changes.has("config")) {
       this.#renderDisabled();
       this.#renderMultiple();
@@ -386,6 +539,9 @@ export class CeSelect extends FormControl {
 
   #syncOptions() {
     this.#dispatch({ type: "OPTIONS_CHANGED", options: this.#collectOptions() });
+
+    // New options may match or miss the current search.
+    this.#renderFilter(false);
 
     // Always, even when the data didn't change: the elements may be new.
     this.#renderAllOptions();
@@ -416,6 +572,45 @@ export class CeSelect extends FormControl {
     return options;
   }
 
+  // Trigger
+
+  /** Gives the combobox role to the current trigger and takes it from the other. */
+  #applyTrigger() {
+    if (!this.#box || !this.#input || !this.#display) {
+      return;
+    }
+
+    const searchable = this.#state.config.searchable;
+    const trigger = searchable ? this.#input : this.#box;
+    const other = searchable ? this.#box : this.#input;
+
+    for (const name of TRIGGER_ATTRIBUTES) {
+      other.removeAttribute(name);
+    }
+
+    other.removeAttribute("tabindex");
+    other.ariaActiveDescendantElement = null;
+    other.ariaLabelledByElements = null;
+    other.ariaDisabled = null;
+
+    trigger.setAttribute("role", "combobox");
+    trigger.setAttribute("aria-haspopup", "listbox");
+    trigger.setAttribute("aria-controls", "listbox");
+    trigger.ariaExpanded = this.#state.open ? "true" : "false";
+
+    if (searchable) {
+      this.#input.ariaAutoComplete = "list";
+    }
+
+    this.#input.hidden = !searchable;
+    setState(this.internals, "searchable", searchable);
+
+    this.#renderDisabled();
+    this.#renderActiveDescendant();
+    this.#renderSelection();
+    this.#renderInput();
+  }
+
   // Rendering
 
   #renderSelection() {
@@ -423,14 +618,19 @@ export class CeSelect extends FormControl {
       return;
     }
 
-    const blank = this.#state.selection.length === 0;
+    const state = this.#state;
+    const blank = state.selection.length === 0;
 
     setState(this.internals, "blank", blank);
-    this.#display.title = blank ? "" : displayText(this.#state);
+    this.#display.title = blank ? "" : displayText(state);
     this.internals.setFormValue(this.#formValue());
 
+    // Searchable single: the input shows the selection instead.
+    this.#display.hidden = state.config.searchable && !state.config.multiple;
+
+    // Searchable: the placeholder is the input's.
     if (blank) {
-      this.#display.textContent = this.placeholder;
+      this.#display.textContent = state.config.searchable ? "" : this.placeholder;
       return;
     }
 
@@ -438,7 +638,7 @@ export class CeSelect extends FormControl {
     // come from CSS.
     const spans: HTMLSpanElement[] = [];
 
-    for (const selected of this.#state.selection) {
+    for (const selected of state.selection) {
       const span = document.createElement("span");
       span.part.add("selected-option");
       span.dataset.value = selected.value;
@@ -447,6 +647,33 @@ export class CeSelect extends FormControl {
     }
 
     this.#display.replaceChildren(...spans);
+  }
+
+  /**
+   * Searchable: what the input shows. While searching, the typed text;
+   * otherwise single shows the selected label, multiple stays empty (the
+   * labels are in the spans before it).
+   */
+  #renderInput() {
+    const input = this.#input;
+    const state = this.#state;
+
+    if (!input || !state.config.searchable) {
+      return;
+    }
+
+    input.placeholder = state.selection.length === 0 ? this.placeholder : "";
+
+    let text = state.query ?? "";
+
+    if (state.query === null && !state.config.multiple) {
+      text = displayText(state);
+    }
+
+    // Skip no-op writes so the caret doesn't jump while typing.
+    if (input.value !== text) {
+      input.value = text;
+    }
   }
 
   /** Single: the value. Multiple: one `name=value` entry per value. */
@@ -475,13 +702,15 @@ export class CeSelect extends FormControl {
   }
 
   #renderOpen() {
-    if (!this.#trigger || !this.#listbox) {
+    const trigger = this.#trigger;
+
+    if (!trigger || !this.#listbox) {
       return;
     }
 
     const open = this.#state.open;
 
-    this.#trigger.ariaExpanded = open ? "true" : "false";
+    trigger.ariaExpanded = open ? "true" : "false";
     setState(this.internals, "open", open);
 
     if (open) {
@@ -554,6 +783,74 @@ export class CeSelect extends FormControl {
     }
   }
 
+  /**
+   * Hides options that don't match the search, the no-results row and the
+   * announcement.
+   * @param updateOptions Update the options whose visibility changed. Off
+   *   when a full render follows anyway.
+   */
+  #renderFilter(updateOptions: boolean) {
+    const visible = visibleOptions(this.#state);
+    const previous = this.#renderedHidden;
+    const hidden = new Set<string>();
+
+    // Only a search hides anything; skip the pass otherwise.
+    if (visible.length !== this.#state.options.length) {
+      const shown = new Set<string>();
+
+      for (const option of visible) {
+        shown.add(option.value);
+      }
+
+      for (const option of this.#state.options) {
+        if (!shown.has(option.value)) {
+          hidden.add(option.value);
+        }
+      }
+    }
+
+    this.#renderedHidden = hidden;
+
+    if (updateOptions) {
+      for (const value of previous) {
+        if (!hidden.has(value)) {
+          this.#renderOption(value);
+        }
+      }
+
+      for (const value of hidden) {
+        if (!previous.has(value)) {
+          this.#renderOption(value);
+        }
+      }
+    }
+
+    const searching = this.#state.query !== null && this.#state.query !== "";
+
+    if (this.#noResults) {
+      this.#noResults.hidden = !searching || visible.length > 0;
+    }
+
+    this.#scheduleAnnouncement(searching ? visible.length : null);
+  }
+
+  /** Announces the result count once typing pauses, not on every keystroke. */
+  #scheduleAnnouncement(count: number | null) {
+    clearTimeout(this.#announceTimer);
+
+    if (count === null) {
+      return;
+    }
+
+    this.#announceTimer = setTimeout(() => {
+      if (!this.#liveRegion) {
+        return;
+      }
+
+      this.#liveRegion.textContent = resultsText(count);
+    }, ANNOUNCE_DELAY);
+  }
+
   #renderOption(value: string | null) {
     if (value === null) {
       return;
@@ -572,7 +869,7 @@ export class CeSelect extends FormControl {
     return {
       selected: isSelected(this.#state, value),
       highlighted: this.#state.navigation.highlighted === value,
-      filteredOut: false,
+      filteredOut: this.#renderedHidden.has(value),
       showCheck: this.#state.config.multiple,
     };
   }
@@ -587,14 +884,16 @@ export class CeSelect extends FormControl {
   }
 
   #renderActiveDescendant() {
-    if (!this.#trigger || !this.#listbox) {
+    const trigger = this.#trigger;
+
+    if (!trigger || !this.#listbox) {
       return;
     }
 
     const value = this.#state.navigation.highlighted;
     const element = value === null ? null : (this.#elements.get(value) ?? null);
 
-    this.#trigger.ariaActiveDescendantElement = element;
+    trigger.ariaActiveDescendantElement = element;
 
     if (!element) {
       return;
@@ -604,22 +903,28 @@ export class CeSelect extends FormControl {
   }
 
   #renderDisabled() {
-    if (!this.#trigger) {
+    if (!this.#box || !this.#input) {
       return;
     }
 
     const disabled = this.#state.config.disabled;
+    const searchable = this.#state.config.searchable;
 
-    this.#trigger.ariaDisabled = disabled ? "true" : null;
+    this.#input.disabled = disabled;
 
-    // No tabindex at all, not -1: with delegatesFocus, pressing anywhere in
-    // the component would still focus a tabindex="-1" trigger.
-    if (disabled) {
-      this.#trigger.removeAttribute("tabindex");
+    const trigger = searchable ? this.#input : this.#box;
+
+    trigger.ariaDisabled = disabled ? "true" : null;
+
+    // The input is focusable by itself. The box: no tabindex at all when
+    // disabled, not -1, because with delegatesFocus pressing anywhere in the
+    // component would still focus a tabindex="-1" box.
+    if (searchable || disabled) {
+      this.#box.removeAttribute("tabindex");
       return;
     }
 
-    this.#trigger.tabIndex = 0;
+    this.#box.tabIndex = 0;
   }
 
   #renderMultiple() {
@@ -636,20 +941,27 @@ export class CeSelect extends FormControl {
   }
 
   #updateLabel() {
-    if (!this.shadowRoot || !this.#trigger || !this.#listbox) {
+    const trigger = this.#trigger;
+
+    if (!this.shadowRoot || !trigger || !this.#listbox) {
       return;
     }
 
-    updateFieldLabel(this, this.shadowRoot, this.#trigger);
+    updateFieldLabel(this, this.shadowRoot, trigger);
 
     // The listbox is named by the same label.
-    this.#listbox.ariaLabelledByElements = this.#trigger.ariaLabelledByElements;
+    this.#listbox.ariaLabelledByElements = trigger.ariaLabelledByElements;
   }
 
-  // Keyboard (WAI-ARIA select-only combobox)
+  // Keyboard (WAI-ARIA combobox: select-only, or editable when searchable)
 
   #onKeydown = (event: KeyboardEvent) => {
     if (this.#state.config.disabled) {
+      return;
+    }
+
+    // Enter and other keys confirm IME composition instead.
+    if (event.isComposing) {
       return;
     }
 
@@ -663,8 +975,26 @@ export class CeSelect extends FormControl {
 
   #onClosedKeydown(event: KeyboardEvent) {
     const key = event.key;
+    const searchable = this.#state.config.searchable;
 
-    if (key === "ArrowDown" || key === "ArrowUp" || key === "Enter" || key === " ") {
+    if (key === "ArrowDown" || key === "ArrowUp") {
+      event.preventDefault();
+      this.#dispatch({ type: "OPEN" });
+      return;
+    }
+
+    // Searchable: a text input, so Enter submits the form like a native one.
+    if (key === "Enter" && searchable) {
+      submitImplicitly(this);
+      return;
+    }
+
+    // Searchable: Space, Home, End and characters edit the text instead.
+    if (searchable) {
+      return;
+    }
+
+    if (key === "Enter" || key === " ") {
       event.preventDefault();
       this.#dispatch({ type: "OPEN" });
       return;
@@ -685,6 +1015,8 @@ export class CeSelect extends FormControl {
 
   #onOpenKeydown(event: KeyboardEvent) {
     const key = event.key;
+    const multiple = this.#state.config.multiple;
+    const searchable = this.#state.config.searchable;
 
     if (key === "Escape") {
       // Close only the popup, not a surrounding dialog.
@@ -693,8 +1025,6 @@ export class CeSelect extends FormControl {
       this.#dispatch({ type: "CLOSE" });
       return;
     }
-
-    const multiple = this.#state.config.multiple;
 
     // Tab lets focus move on. Single: picks the highlighted option first.
     if (key === "Tab") {
@@ -716,6 +1046,11 @@ export class CeSelect extends FormControl {
       return;
     }
 
+    // Searchable: Home and End move the caret, Space types.
+    if (searchable && (key === "Home" || key === "End" || key === " ")) {
+      return;
+    }
+
     // Space continues a type-ahead search ("New York"), otherwise like Enter.
     if (key === " " && !this.#isTyping(event)) {
       event.preventDefault();
@@ -731,7 +1066,8 @@ export class CeSelect extends FormControl {
       return;
     }
 
-    if (isPrintable(event)) {
+    // Searchable: characters go into the input.
+    if (isPrintable(event) && !searchable) {
       event.preventDefault();
       this.#typeaheadKey(event);
       return;
@@ -750,14 +1086,44 @@ export class CeSelect extends FormControl {
     return buffer.text !== "" && event.timeStamp - buffer.time <= buffer.timeout;
   }
 
+  // Search input
+
+  #onSearchInput = (event: Event) => {
+    // Our `input` event means "the value changed"; typing isn't that.
+    event.stopPropagation();
+
+    if (!this.#input) {
+      return;
+    }
+
+    const query = this.#input.value;
+
+    this.#dispatch({ type: "QUERY", text: query });
+
+    const detail: SearchEventDetail = { query };
+
+    this.dispatchEvent(new CustomEvent("search", { bubbles: true, composed: true, detail }));
+  };
+
+  // Typing replaces the shown label instead of appending to it.
+  #onInputFocus = () => {
+    this.#input?.select();
+  };
+
   // Mouse
 
-  #onTriggerMousedown = (event: MouseEvent) => {
+  #onBoxMousedown = (event: MouseEvent) => {
     if (event.button !== 0 || this.#state.config.disabled) {
       return;
     }
 
-    // Keep focus on the trigger and avoid selecting its text.
+    // Searchable: pressing the input places the caret as usual and opens.
+    if (this.#state.config.searchable && event.target === this.#input) {
+      this.#dispatch({ type: "OPEN" });
+      return;
+    }
+
+    // Keep focus on the trigger and avoid selecting text.
     event.preventDefault();
     this.#trigger?.focus();
 
@@ -814,7 +1180,8 @@ export class CeSelect extends FormControl {
       return;
     }
 
-    this.#dispatch({ type: "BLUR" });
+    // Searchable: leaving with the text erased clears the selection.
+    this.#dispatch({ type: "BLUR" }, true);
   };
 }
 
@@ -832,6 +1199,18 @@ function owningOption(target: EventTarget | null): CeOption | null {
 
 function isPrintable(event: KeyboardEvent): boolean {
   return event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey;
+}
+
+function resultsText(count: number): string {
+  if (count === 0) {
+    return "No results";
+  }
+
+  if (count === 1) {
+    return "1 result";
+  }
+
+  return `${count} results`;
 }
 
 /** Scrolls `list` just enough to show `item`, without scrolling the page. */
@@ -852,6 +1231,10 @@ function scrollIntoList(list: HTMLElement, item: HTMLElement): void {
 declare global {
   interface HTMLElementTagNameMap {
     "ce-select": CeSelect;
+  }
+
+  interface HTMLElementEventMap {
+    search: CustomEvent<SearchEventDetail>;
   }
 }
 

@@ -14,7 +14,7 @@ function render(hostHtml = "") {
   const host = document.createElement("div");
   host.innerHTML = hostHtml;
 
-  const root = host.attachShadow({ mode: "open" });
+  const root = host.attachShadow({ mode: "open", delegatesFocus: true });
   root.innerHTML = `${labelMarkup}<input />`;
 
   document.body.append(host);
@@ -109,7 +109,9 @@ describe("setupFieldLabel", () => {
     const { host, root, label, control } = render();
     host.setAttribute("label", "First name");
 
-    setupFieldLabel(host, root, control);
+    setupFieldLabel(host, root, () => {
+      updateFieldLabel(host, root, control);
+    });
     updateFieldLabel(host, root, control);
     label.click();
 
@@ -127,14 +129,16 @@ describe("setupFieldLabel", () => {
     host.setAttribute("disabled", "");
     host.setAttribute("label", "First name");
 
-    const root = host.attachShadow({ mode: "open" });
+    const root = host.attachShadow({ mode: "open", delegatesFocus: true });
     root.innerHTML = `${labelMarkup}<div tabindex="-1"></div>`;
     document.body.append(host);
 
     const label = query(root, "label");
     const control = query<HTMLElement>(root, "div");
 
-    setupFieldLabel(host, root, control);
+    setupFieldLabel(host, root, () => {
+      updateFieldLabel(host, root, control);
+    });
     updateFieldLabel(host, root, control);
     label.click();
 
@@ -144,7 +148,9 @@ describe("setupFieldLabel", () => {
   it("updates when content is slotted or removed", async () => {
     const { host, root, label, slot, control } = render();
 
-    setupFieldLabel(host, root, control);
+    setupFieldLabel(host, root, () => {
+      updateFieldLabel(host, root, control);
+    });
     updateFieldLabel(host, root, control);
 
     expect(label.hidden).toBe(true);

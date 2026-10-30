@@ -162,21 +162,18 @@ Each phase ends with tests passing and a demo update, ready for review.
 - Turning `multiple` off keeps the first selected value.
 - `input` + `change` on every user toggle.
 
-### Phase 6: searchable
+### Phase 6: searchable — done
 
-- Trigger becomes an `<input role="combobox" aria-autocomplete="list">` (same `part="base"` box).
-- Typing → `QUERY`: opens, filters by case-insensitive substring of label, highlights first match.
-- "No results" row (`part="no-results"`, not an option) when nothing matches.
-- Closed, single: input shows the selected label. Open: input shows the query.
-- Closed, multiple: input shows comma-separated labels; opening clears it for typing.
-- `Backspace` in an empty query doesn't remove selections (keep it simple).
-- Type-ahead is disabled; typing goes to the query instead.
-- Focus selects the input text, so typing replaces it.
-- `Escape` closes and restores the input to the selected label.
-- Blur (single): empty input clears the selection (fires `input` + `change`); any other unmatched text reverts to the selected label.
-- Typing fires a `search` event (`detail: { query }`), not `input`. `input` / `change` stay reserved for value changes, so listeners don't confuse typing with selecting.
-- Async loading: consumer listens to `search` and replaces options; selection and labels survive (see "Selection is independent of options"). `no-filter` attribute turns off built-in filtering for server-filtered results.
-- Live region (`aria-live="polite"`) announces the result count after filtering ("3 options", "No results").
+- `searchable` attribute (reflected, switchable at runtime). Both triggers are in the template: the box (`part="base"`) and an `<input part="input">` inside it. The current one gets `role="combobox"`, `aria-haspopup`, `aria-controls`, `aria-expanded`, the active descendant and the label; the other loses them. Focus moves along when switching. Input: `aria-autocomplete="list"`, `autocomplete="off"`, `autocapitalize="off"`, `spellcheck="false"`. Keyboard and focus listeners are on the box only (the input's events bubble to it).
+- Input text: while searching, the typed text; otherwise single shows the selected label, multiple stays empty with the `selected-option` spans before it. The placeholder moves to the input when nothing is selected. Focus selects the text.
+- Typing → `QUERY` (opens, filters by case-insensitive label substring, highlights the first match) and a `search` event (`detail: { query }`, bubbles, composed). The inner input's own `input` events are stopped: our `input` / `change` mean "value changed".
+- Keyboard (APG editable combobox): characters, Space, Backspace, Home / End edit the text; ↓ / ↑ / PageUp / PageDown move; Alt+↓ opens; Enter selects (single) or toggles (multiple); Alt+↑, Escape, Tab as in the other modes; Escape restores the label. Enter while closed submits the form (it's a text input). No type-ahead.
+- Blur (`BLUR`, counts as a user action): erased text clears a single selection (fires `input` / `change`); other text is dropped and the label comes back.
+- Mouse: pressing the input opens and places the caret; pressing elsewhere on the box (chevron) toggles.
+- `no-filter`: no built-in filtering; the app replaces options from `search` (server results). The selection and its labels survive.
+- No results: `part="no-results"` row in the popup (not an option, `aria-hidden`). A polite live region announces "N results" / "No results" 300 ms after typing pauses.
+- Performance: filtering is one pass over labels per keystroke (pure JS); only options whose visibility changed get `setView` (`#renderedHidden`); no pass at all when nothing is filtered.
+- Known edge: duplicate-value elements aren't filtered (they're inert anyway).
 
 ### Phase 7: clear and polish
 

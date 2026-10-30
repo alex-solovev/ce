@@ -165,6 +165,28 @@ function spyOnSetView() {
   };
 }
 
+function searchInput(select: CeSelect): HTMLInputElement {
+  return queryShadow<HTMLInputElement>(select, "[part='input']");
+}
+
+/** Values of options not hidden by the search filter. */
+function shownValues(select: CeSelect): string[] {
+  const result: string[] = [];
+
+  for (const element of select.querySelectorAll("ce-option")) {
+    if (!element.matches(":state(filtered-out)")) {
+      result.push(element.value);
+    }
+  }
+
+  return result;
+}
+
+async function focusAndType(select: CeSelect, keys: string): Promise<void> {
+  searchInput(select).focus();
+  await userEvent.keyboard(keys);
+}
+
 describe("ce-select", () => {
   describe("options and value", () => {
     it("shows the placeholder and submits nothing without a selection", () => {
@@ -1289,6 +1311,333 @@ describe("ce-select", () => {
       expect(querySelectorAll).not.toHaveBeenCalled();
 
       querySelectorAll.mockRestore();
+    });
+  });
+  describe("searchable", () => {
+    it("makes the input the combobox, named by the label", async () => {
+      const { select } = render(
+        `<ce-select name="fruit" label="Fruit" searchable>${fruits}</ce-select>`,
+      );
+      const input = searchInput(select);
+
+      expect(input.hidden).toBe(false);
+      expect(input.getAttribute("role")).toBe("combobox");
+      expect(input.ariaAutoComplete).toBe("list");
+      expect(trigger(select).hasAttribute("role")).toBe(false);
+      expect(trigger(select).hasAttribute("tabindex")).toBe(false);
+
+      await focusAndType(select, "{ArrowDown}");
+
+      const nodes = await accessibleNodeDetails();
+
+      expect(accessibleNames(nodes, "combobox")).toEqual(["Fruit"]);
+      expect(input.ariaExpanded).toBe("true");
+      expect(input.ariaActiveDescendantElement).toBe(option(select, "apple"));
+    });
+
+    it("filters case-insensitively and highlights the first match while typing", async () => {
+      const { select } = render(`<ce-select name="fruit" searchable>${fruits}</ce-select>`);
+
+      await focusAndType(select, "A");
+
+      expect(isOpen(select)).toBe(true);
+      expect(shownValues(select)).toEqual(["apple", "banana", "date"]);
+      expect(searchInput(select).ariaActiveDescendantElement).toBe(option(select, "apple"));
+
+      await userEvent.keyboard("N");
+
+      expect(shownValues(select)).toEqual(["banana"]);
+      expect(searchInput(select).ariaActiveDescendantElement).toBe(option(select, "banana"));
+
+      await userEvent.keyboard("{Backspace}{Backspace}");
+
+      expect(shownValues(select)).toEqual(["apple", "banana", "cherry", "date"]);
+    });
+
+    it("fires search on every edit, but not input or change", async () => {
+      const { select, events } = render(`<ce-select name="fruit" searchable>${fruits}</ce-select>`);
+      const queries: string[] = [];
+
+      select.addEventListener("search", (event) => {
+        queries.push(event.detail.query);
+      });
+
+      await focusAndType(select, "ba{Backspace}");
+
+      expect(queries).toEqual(["b", "ba", "b"]);
+      expect(events).toEqual([]);
+    });
+
+    it("selects on Enter and shows the label in the input", async () => {
+      const { select, events } = render(`<ce-select name="fruit" searchable>${fruits}</ce-select>`);
+
+      await focusAndType(select, "dat{Enter}");
+
+      expect(select.value).toBe("date");
+      expect(isOpen(select)).toBe(false);
+      expect(searchInput(select).value).toBe("Date");
+      expect(shownValues(select)).toEqual(["apple", "banana", "cherry", "date"]);
+      expect(events).toEqual(["input", "change"]);
+    });
+
+    it("shows a no-results row when nothing matches", async () => {
+      const { select } = render(`<ce-select name="fruit" searchable>${fruits}</ce-select>`);
+      const noResults = queryShadow<HTMLElement>(select, "[part='no-results']");
+
+      expect(noResults.hidden).toBe(true);
+
+      await focusAndType(select, "zz");
+
+      expect(noResults.hidden).toBe(false);
+      expect(shownValues(select)).toEqual([]);
+      expect(searchInput(select).ariaActiveDescendantElement).toBe(null);
+
+      await userEvent.keyboard("{Backspace}{Backspace}");
+
+      expect(noResults.hidden).toBe(true);
+    });
+
+    it("announces the result count once typing pauses", async () => {
+      const { select } = render(`<ce-select name="fruit" searchable>${fruits}</ce-select>`);
+      const input = searchInput(select);
+      const liveRegion = queryShadow(select, "[aria-live]");
+
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+      input.value = "a";
+      input.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true }));
+      vi.advanceTimersByTime(200);
+
+      input.value = "an";
+      input.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true }));
+      vi.advanceTimersByTime(200);
+
+      // The first count was dropped when typing continued.
+      expect(liveRegion.textContent).toBe("");
+
+      vi.advanceTimersByTime(100);
+      expect(liveRegion.textContent).toBe("1 result");
+
+      input.value = "anz";
+      input.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true }));
+      vi.advanceTimersByTime(300);
+      expect(liveRegion.textContent).toBe("No results");
+
+      vi.useRealTimers();
+    });
+
+    it("types Space and keeps Home / End for the caret", async () => {
+      const { select } = render(`
+        <ce-select name="city" searchable>
+          <ce-option>Newark</ce-option>
+          <ce-option>New York</ce-option>
+          <ce-option>Nice</ce-option>
+        </ce-select>
+      `);
+      const input = searchInput(select);
+
+      await focusAndType(select, "new y");
+
+      expect(input.value).toBe("new y");
+      expect(shownValues(select)).toEqual(["New York"]);
+
+      await userEvent.keyboard("{Home}");
+
+      expect(input.selectionStart).toBe(0);
+      expect(input.ariaActiveDescendantElement?.textContent).toBe("New York");
+
+      await userEvent.keyboard("{End}");
+
+      expect(input.selectionStart).toBe(5);
+    });
+
+    it("closes on Escape and puts the selected label back", async () => {
+      const { select } = render(`<ce-select name="fruit" searchable>${fruits}</ce-select>`);
+
+      select.value = "banana";
+      await focusAndType(select, "zz{Escape}");
+
+      expect(isOpen(select)).toBe(false);
+      expect(select.value).toBe("banana");
+      expect(searchInput(select).value).toBe("Banana");
+    });
+
+    it("selects its text on focus, so typing replaces the label", async () => {
+      const { select } = render(`<ce-select name="fruit" searchable>${fruits}</ce-select>`);
+      const input = searchInput(select);
+
+      select.value = "banana";
+      input.focus();
+
+      expect(input.selectionStart).toBe(0);
+      expect(input.selectionEnd).toBe("Banana".length);
+    });
+
+    it("clears the selection when the text is erased and focus leaves", async () => {
+      const { form, select, events } = render(
+        `<ce-select name="fruit" searchable>${fruits}</ce-select>`,
+      );
+      const other = document.createElement("input");
+      form.append(other);
+
+      select.value = "banana";
+      await focusAndType(select, "{Backspace}");
+      other.focus();
+
+      expect(select.value).toBe("");
+      expect(searchInput(select).value).toBe("");
+      expect(events).toEqual(["input", "change"]);
+    });
+
+    it("keeps the selection and restores the label when other text is left", async () => {
+      const { form, select } = render(`<ce-select name="fruit" searchable>${fruits}</ce-select>`);
+      const other = document.createElement("input");
+      form.append(other);
+
+      select.value = "banana";
+      await focusAndType(select, "zz");
+      other.focus();
+
+      expect(select.value).toBe("banana");
+      expect(searchInput(select).value).toBe("Banana");
+    });
+
+    it("submits the form on Enter while closed", async () => {
+      const { form, select } = render(`<ce-select name="fruit" searchable>${fruits}</ce-select>`);
+      let submits = 0;
+
+      form.addEventListener("submit", () => {
+        submits++;
+      });
+
+      await focusAndType(select, "{Enter}");
+
+      expect(submits).toBe(1);
+      expect(isOpen(select)).toBe(false);
+    });
+
+    it("opens when the input is pressed and toggles from the chevron", async () => {
+      const { select } = render(`<ce-select name="fruit" searchable>${fruits}</ce-select>`);
+
+      await userEvent.click(searchInput(select));
+      expect(isOpen(select)).toBe(true);
+      expect(select.shadowRoot?.activeElement).toBe(searchInput(select));
+
+      // Pressing the input again keeps it open (it's for placing the caret).
+      await userEvent.click(searchInput(select));
+      expect(isOpen(select)).toBe(true);
+
+      await userEvent.click(queryShadow(select, "[part='chevron']"));
+      expect(isOpen(select)).toBe(false);
+      expect(select.shadowRoot?.activeElement).toBe(searchInput(select));
+    });
+
+    it("doesn't filter with no-filter, so the app can load matching options", async () => {
+      const { select } = render(
+        `<ce-select name="fruit" searchable no-filter>${fruits}</ce-select>`,
+      );
+
+      select.value = "banana";
+
+      select.addEventListener("search", (event) => {
+        // Stand-in for a server search: replace the options.
+        select.innerHTML = `<ce-option value="${event.detail.query}">Result for ${event.detail.query}</ce-option>`;
+      });
+
+      await focusAndType(select, "kiwi");
+      await mutationsSettled();
+
+      expect(shownValues(select)).toEqual(["kiwi"]);
+      expect(select.value).toBe("banana");
+
+      await userEvent.keyboard("{Escape}");
+
+      // The selection outlived its option, label included.
+      expect(searchInput(select).value).toBe("Banana");
+    });
+
+    it("keeps the spans before an empty input in multiple mode", async () => {
+      const { select } = render(`
+        <ce-select name="fruit" searchable multiple placeholder="Pick fruit">${fruits}</ce-select>
+      `);
+      const input = searchInput(select);
+
+      expect(input.placeholder).toBe("Pick fruit");
+
+      await focusAndType(select, "an{Enter}");
+
+      expect(select.values).toEqual(["banana"]);
+      expect(selectedSpans(select)).toEqual(["banana:Banana"]);
+      expect(isOpen(select)).toBe(true);
+      expect(input.value).toBe("an");
+      expect(input.placeholder).toBe("");
+
+      await userEvent.keyboard("{Escape}");
+
+      expect(input.value).toBe("");
+      expect(selectedSpans(select)).toEqual(["banana:Banana"]);
+    });
+
+    it("can be switched on and off at runtime", async () => {
+      const { select } = render(`<ce-select name="fruit" label="Fruit">${fruits}</ce-select>`);
+      const input = searchInput(select);
+
+      select.value = "date";
+      trigger(select).focus();
+      select.searchable = true;
+
+      expect(input.hidden).toBe(false);
+      expect(input.getAttribute("role")).toBe("combobox");
+      expect(input.value).toBe("Date");
+      expect(trigger(select).hasAttribute("role")).toBe(false);
+      expect(select.shadowRoot?.activeElement).toBe(input);
+      expect(accessibleNames(await accessibleNodeDetails(), "combobox")).toEqual(["Fruit"]);
+
+      select.searchable = false;
+
+      expect(input.hidden).toBe(true);
+      expect(input.hasAttribute("role")).toBe(false);
+      expect(trigger(select).getAttribute("role")).toBe("combobox");
+      expect(trigger(select).tabIndex).toBe(0);
+      expect(select.shadowRoot?.activeElement).toBe(trigger(select));
+      expect(display(select)).toBe("Date");
+    });
+
+    it("disables the input", async () => {
+      const { select } = render(
+        `<ce-select name="fruit" label="Fruit" searchable disabled>${fruits}</ce-select>`,
+      );
+
+      expect(searchInput(select).disabled).toBe(true);
+
+      await userEvent.click(queryShadow(select, "[part='label']"));
+
+      expect(select.shadowRoot?.activeElement).toBe(null);
+    });
+
+    it("updates only options whose visibility changed while typing", async () => {
+      const { select } = render(
+        `<ce-select name="item" searchable>${manyOptions(2000)}</ce-select>`,
+      );
+
+      await focusAndType(select, "option 199");
+
+      const views = spyOnSetView();
+
+      // "option 199" shows v199 and v1990–v1999; "option 1999" only v1999.
+      await userEvent.keyboard("9");
+
+      const touched = new Set(views.takeValues());
+      const expected = new Set(["v199", "v1990", "v1991", "v1992", "v1993", "v1994"]);
+
+      for (const value of ["v1995", "v1996", "v1997", "v1998", "v1999"]) {
+        expected.add(value);
+      }
+
+      expect(touched).toEqual(expected);
+      expect(shownValues(select)).toEqual(["v1999"]);
+
+      views.restore();
     });
   });
 });

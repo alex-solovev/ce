@@ -14,17 +14,16 @@ export const labelStyles: string = `
 `;
 
 /**
- * Adds the label's listeners: clicking it focuses `control`, and slot changes
- * update it. Call once, after `labelMarkup` is in `root`.
+ * Adds the label's listeners. Call once, after `labelMarkup` is in `root`.
  *
- * @param control The focusable element to name.
+ * Clicking the label focuses the host, which must use `delegatesFocus` so
+ * focus lands on its current control. Slot changes call `onChange`, where
+ * the component calls `updateFieldLabel` with whichever control it uses.
  */
-export function setupFieldLabel(host: HTMLElement, root: ShadowRoot, control: HTMLElement): void {
+export function setupFieldLabel(host: HTMLElement, root: ShadowRoot, onChange: () => void): void {
   const { label, slot } = findLabel(root);
 
-  slot.addEventListener("slotchange", () => {
-    updateFieldLabel(host, root, control);
-  });
+  slot.addEventListener("slotchange", onChange);
 
   label.addEventListener("click", () => {
     // A disabled control can't be focused, even if `focus()` would allow it
@@ -33,7 +32,7 @@ export function setupFieldLabel(host: HTMLElement, root: ShadowRoot, control: HT
       return;
     }
 
-    control.focus();
+    host.focus();
   });
 }
 

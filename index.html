@@ -100,9 +100,35 @@
         <ce-select
           id="large"
           name="large"
-          label="Large list (2,000 options)"
-          placeholder="Pick one"
+          label="Large list (2,000 options, searchable)"
+          placeholder="Search items"
+          searchable
         ></ce-select>
+      </p>
+      <p>
+        <ce-select
+          name="countries"
+          label="Countries (searchable, multiple)"
+          placeholder="Search countries"
+          searchable
+          multiple
+        >
+          <ce-option value="at">Austria</ce-option>
+          <ce-option value="be">Belgium</ce-option>
+          <ce-option value="dk">Denmark</ce-option>
+          <ce-option value="fi">Finland</ce-option>
+          <ce-option value="fr" selected>France</ce-option>
+          <ce-option value="de">Germany</ce-option>
+          <ce-option value="ie">Ireland</ce-option>
+          <ce-option value="it">Italy</ce-option>
+          <ce-option value="nl">Netherlands</ce-option>
+          <ce-option value="no">Norway</ce-option>
+          <ce-option value="pt">Portugal</ce-option>
+          <ce-option value="es">Spain</ce-option>
+          <ce-option value="se">Sweden</ce-option>
+          <ce-option value="ch">Switzerland</ce-option>
+          <ce-option value="gb">United Kingdom</ce-option>
+        </ce-select>
       </p>
       <fieldset id="group">
         <legend>Fieldset</legend>

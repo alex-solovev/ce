@@ -216,7 +216,9 @@ export class CeInput extends FormControl {
     this.#input = input;
     this.#clearButton = clearButton;
 
-    setupFieldLabel(this, root, input);
+    setupFieldLabel(this, root, () => {
+      this.#updateLabel();
+    });
   }
 
   #onInput = () => {
