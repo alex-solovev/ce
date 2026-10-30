@@ -1,15 +1,10 @@
 # custom-elements
 
-To install dependencies:
+Custom elements library with minimal dependencies. See [docs/](docs/) for the approach and conventions.
 
 ```bash
-bun install
+vp install   # install dependencies
+vp dev       # demo page (index.html)
+vp test      # browser tests
+vp check     # format, lint, type check
 ```
-
-To run:
-
-```bash
-bun run index.ts
-```
-
-This project was created using `bun init` in bun v1.3.5. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
