@@ -1,4 +1,4 @@
-import { FormControl } from "./form-control.js";
+import { FormControl } from "../core/form-control.js";
 
 /**
  * Single-line text input.

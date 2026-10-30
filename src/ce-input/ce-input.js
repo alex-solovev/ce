@@ -1,5 +1,5 @@
-import { FormControl } from "./form-control.js";
-import { submitImplicitly } from "./implicit-submit.js";
+import { FormControl } from "../core/form-control.js";
+import { submitImplicitly } from "../core/implicit-submit.js";
 
 const template = document.createElement("template");
 template.innerHTML = `
