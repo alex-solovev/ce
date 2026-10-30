@@ -165,6 +165,19 @@ function spyOnSetView() {
   };
 }
 
+/** Dispatches a primary-button pointer event, from a mouse or a touch. */
+function pointer(target: Element, type: string, pointerType = "mouse"): void {
+  target.dispatchEvent(
+    new PointerEvent(type, {
+      bubbles: true,
+      composed: true,
+      button: 0,
+      isPrimary: true,
+      pointerType,
+    }),
+  );
+}
+
 function searchInput(select: CeSelect): HTMLInputElement {
   return queryShadow<HTMLInputElement>(select, "[part='input']");
 }
@@ -406,6 +419,118 @@ describe("ce-select", () => {
 
       await userEvent.click(trigger(select));
       await userEvent.click(outside);
+
+      expect(isOpen(select)).toBe(false);
+    });
+  });
+
+  describe("pointer events", () => {
+    it("toggles on a mouse press, before release", () => {
+      const { select } = render(`<ce-select name="fruit">${fruits}</ce-select>`);
+
+      pointer(trigger(select), "pointerdown");
+      expect(isOpen(select)).toBe(true);
+      expect(select.shadowRoot?.activeElement).toBe(trigger(select));
+
+      pointer(trigger(select), "pointerdown");
+      expect(isOpen(select)).toBe(false);
+    });
+
+    it("touch toggles on release, so a swipe starting on the field can scroll the page", () => {
+      const { select } = render(`<ce-select name="fruit">${fruits}</ce-select>`);
+
+      pointer(trigger(select), "pointerdown", "touch");
+      expect(isOpen(select)).toBe(false);
+
+      pointer(trigger(select), "pointerup", "touch");
+      expect(isOpen(select)).toBe(true);
+      expect(select.shadowRoot?.activeElement).toBe(trigger(select));
+
+      pointer(trigger(select), "pointerdown", "touch");
+      pointer(trigger(select), "pointerup", "touch");
+      expect(isOpen(select)).toBe(false);
+    });
+
+    it("touch doesn't open when the browser takes the touch for scrolling", () => {
+      const { select } = render(`<ce-select name="fruit">${fruits}</ce-select>`);
+
+      pointer(trigger(select), "pointerdown", "touch");
+      pointer(trigger(select), "pointercancel", "touch");
+
+      expect(isOpen(select)).toBe(false);
+    });
+
+    it("a mouse release on the trigger doesn't toggle again", () => {
+      const { select } = render(`<ce-select name="fruit">${fruits}</ce-select>`);
+
+      pointer(trigger(select), "pointerdown");
+      pointer(trigger(select), "pointerup");
+
+      expect(isOpen(select)).toBe(true);
+    });
+
+    it("selects an option on a touch release", async () => {
+      const { select, events } = render(`<ce-select name="fruit">${fruits}</ce-select>`);
+
+      await focusAndPress(select, "{ArrowDown}");
+      pointer(option(select, "banana"), "pointerup", "touch");
+
+      expect(select.value).toBe("banana");
+      expect(isOpen(select)).toBe(false);
+      expect(events).toEqual(["input", "change"]);
+    });
+
+    it("toggles an option on a touch release in multiple mode", async () => {
+      const { select } = render(`<ce-select name="fruit" multiple>${fruits}</ce-select>`);
+
+      await focusAndPress(select, "{ArrowDown}");
+      pointer(option(select, "banana"), "pointerup", "touch");
+      pointer(option(select, "date"), "pointerup", "touch");
+
+      expect(select.values).toEqual(["banana", "date"]);
+      expect(isOpen(select)).toBe(true);
+    });
+
+    it("closes when a touch presses outside", async () => {
+      const { form, select } = render(`<ce-select name="fruit">${fruits}</ce-select>`);
+      const outside = document.createElement("p");
+      form.append(outside);
+
+      await focusAndPress(select, "{ArrowDown}");
+      pointer(outside, "pointerdown", "touch");
+
+      expect(isOpen(select)).toBe(false);
+    });
+
+    it("pressing the clear button doesn't toggle the list", () => {
+      const { select } = render(`<ce-select name="fruit" with-clear>${fruits}</ce-select>`);
+
+      select.value = "banana";
+      pointer(queryShadow(select, "[part='clear-button']"), "pointerdown");
+      pointer(queryShadow(select, "[part='clear-button']"), "pointerup", "touch");
+
+      expect(isOpen(select)).toBe(false);
+    });
+
+    it("searchable: a touch on the input opens on release", () => {
+      const { select } = render(`<ce-select name="fruit" searchable>${fruits}</ce-select>`);
+
+      pointer(searchInput(select), "pointerdown", "touch");
+      expect(isOpen(select)).toBe(false);
+
+      pointer(searchInput(select), "pointerup", "touch");
+      expect(isOpen(select)).toBe(true);
+
+      // Tapping the input again is for placing the caret: it stays open.
+      pointer(searchInput(select), "pointerup", "touch");
+      expect(isOpen(select)).toBe(true);
+    });
+
+    it("ignores a disabled select", () => {
+      const { select } = render(`<ce-select name="fruit" disabled>${fruits}</ce-select>`);
+
+      pointer(trigger(select), "pointerdown");
+      pointer(trigger(select), "pointerup", "touch");
 
       expect(isOpen(select)).toBe(false);
     });
@@ -714,7 +839,7 @@ describe("ce-select", () => {
       select.remove();
 
       expect(isOpen(select)).toBe(false);
-      expect(removeListener).toHaveBeenCalledWith("mousedown", expect.any(Function));
+      expect(removeListener).toHaveBeenCalledWith("pointerdown", expect.any(Function));
 
       removeListener.mockRestore();
     });
@@ -1066,9 +1191,9 @@ describe("ce-select", () => {
       await focusAndPress(select, "{ArrowDown}");
 
       option(select, "banana").dispatchEvent(
-        new MouseEvent("mouseup", { bubbles: true, button: 2 }),
+        new PointerEvent("pointerup", { bubbles: true, button: 2 }),
       );
-      listbox.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0 }));
+      listbox.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, button: 0 }));
 
       expect(select.value).toBe("");
       expect(isOpen(select)).toBe(true);

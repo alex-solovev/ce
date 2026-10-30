@@ -291,16 +291,19 @@ export class CeSelect extends FormControl {
     // On the box only: the input is inside it, so its events bubble here.
     box.addEventListener("keydown", this.#onKeydown);
     box.addEventListener("focusout", this.#onFocusout);
+    box.addEventListener("pointerdown", this.#onBoxPointerdown);
+    box.addEventListener("pointerup", this.#onBoxPointerup);
     box.addEventListener("mousedown", this.#onBoxMousedown);
 
-    clearButton.addEventListener("mousedown", this.#onClearMousedown);
+    clearButton.addEventListener("pointerdown", this.#onClearPointer);
+    clearButton.addEventListener("pointerup", this.#onClearPointer);
     clearButton.addEventListener("click", this.#onClearClick);
 
     input.addEventListener("input", this.#onSearchInput);
     input.addEventListener("focus", this.#onInputFocus);
 
     listbox.addEventListener("mousedown", this.#onListboxMousedown);
-    listbox.addEventListener("mouseup", this.#onListboxMouseup);
+    listbox.addEventListener("pointerup", this.#onListboxPointerup);
     listbox.addEventListener("pointermove", this.#onListboxPointermove);
 
     setupFieldLabel(this, context.root, () => {
@@ -366,13 +369,13 @@ export class CeSelect extends FormControl {
 
     // Pressing outside closes the list; only listened to while open.
     if (changes.has("open") && this.#state.open) {
-      document.addEventListener("mousedown", this.#onDocumentMousedown);
+      document.addEventListener("pointerdown", this.#onDocumentPointerdown);
     }
 
     // Always remove when closed: taken out of the page, the browser may
     // already have hidden the popover.
     if (!this.#state.open) {
-      document.removeEventListener("mousedown", this.#onDocumentMousedown);
+      document.removeEventListener("pointerdown", this.#onDocumentPointerdown);
     }
   }
 
@@ -639,9 +642,29 @@ export class CeSelect extends FormControl {
     this.#context?.refs.input.select();
   };
 
-  // Mouse
+  // Pointer: pointer events rather than mouse events, which touch browsers
+  // (iOS in particular) don't reliably send for a tap.
 
-  #onBoxMousedown = (event: MouseEvent) => {
+  // A mouse toggles on press, like a native select.
+  #onBoxPointerdown = (event: PointerEvent) => {
+    if (event.pointerType !== "mouse") {
+      return;
+    }
+
+    this.#pressBox(event);
+  };
+
+  // Touch and pen toggle on release: a swipe that starts on the field
+  // scrolls the page instead (the browser sends pointercancel, no pointerup).
+  #onBoxPointerup = (event: PointerEvent) => {
+    if (event.pointerType === "mouse") {
+      return;
+    }
+
+    this.#pressBox(event);
+  };
+
+  #pressBox(event: PointerEvent) {
     const context = this.#context;
 
     if (!context || event.button !== 0 || this.#state.config.disabled) {
@@ -654,8 +677,6 @@ export class CeSelect extends FormControl {
       return;
     }
 
-    // Keep focus on the trigger and avoid selecting text.
-    event.preventDefault();
     render.trigger(context).focus();
 
     if (this.#state.open) {
@@ -664,11 +685,20 @@ export class CeSelect extends FormControl {
     }
 
     this.#render(logic.openList(this.#state));
+  }
+
+  // Keep focus on the trigger and avoid selecting text; the input keeps its
+  // own caret placement.
+  #onBoxMousedown = (event: MouseEvent) => {
+    if (event.target === this.#context?.refs.input) {
+      return;
+    }
+
+    event.preventDefault();
   };
 
-  // Pressing the clear button mustn't move focus or count as pressing the box.
-  #onClearMousedown = (event: MouseEvent) => {
-    event.preventDefault();
+  // Pressing the clear button mustn't count as pressing the box.
+  #onClearPointer = (event: PointerEvent) => {
     event.stopPropagation();
   };
 
@@ -689,7 +719,8 @@ export class CeSelect extends FormControl {
   };
 
   // Selecting on release also allows press on the trigger, drag, release.
-  #onListboxMouseup = (event: MouseEvent) => {
+  // A touch that scrolls the list gets pointercancel instead, so no pick.
+  #onListboxPointerup = (event: PointerEvent) => {
     const context = this.#context;
 
     if (!context || event.button !== 0) {
@@ -726,7 +757,7 @@ export class CeSelect extends FormControl {
   };
 
   // Pressing outside means leaving: like blur, it clears erased search text.
-  #onDocumentMousedown = (event: MouseEvent) => {
+  #onDocumentPointerdown = (event: PointerEvent) => {
     if (event.composedPath().includes(this)) {
       return;
     }
