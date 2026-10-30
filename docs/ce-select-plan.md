@@ -101,13 +101,16 @@ Each phase ends with tests passing and a demo update, ready for review.
   - Corner cases from below that don't need the DOM.
   - Random action sequences (seeded, a few thousand steps, no extra dependency) with `checkInvariants` after each step.
 
-### Phase 2: `ce-option`
+### Phase 2: `ce-option` — done
 
-- Attributes: `value`, `disabled`, `selected` (default selection, like native `<option selected>`), `label` (optional; otherwise trimmed `textContent`).
-- `role="option"`, `ariaSelected`, `ariaDisabled` via `ElementInternals`.
-- Custom states for styling: `:state(selected)`, `:state(highlighted)`, `:state(filtered-out)`. Filtering hides via a state, not the `hidden` attribute, so we never mutate user DOM (and don't trigger our own `MutationObserver`).
-- `start` slot for an icon. Check mark shown when selected in multiple mode.
-- Options are controlled by the select; `ce-option` has no behaviour on its own.
+- `src/ce-select/ce-option.ts`. Attributes: `value` (defaults to the label), `disabled`, `selected` (default selection, like native `<option selected>`; property `defaultSelected`).
+- Label: default slot only, no `label` attribute. `label` property is the text of unslotted content, whitespace collapsed (comments ignored).
+- Description: `description` slot (attribute TBD). `description` property is its text; the description part is hidden when empty.
+- `start` slot for a decorative icon. Check mark (`part="check"`) only for selected options in multiple mode.
+- Accessibility via `ElementInternals`: `role="option"`, `ariaSelected`, `ariaDisabled`, and an explicit `ariaLabel` / `ariaDescription` so the description and icons don't leak into the name.
+- No `MutationObserver` per option: the select's single subtree observer calls the internal `refresh()` on options whose text changed. Slot changes (children added or removed, including while parsing) refresh on their own.
+- Controlled by the select through the internal `setView({ selected, highlighted, filteredOut, showCheck })`: custom states `:state(selected)`, `:state(highlighted)`, `:state(filtered-out)`, `:state(checkable)`. Filtering hides via a state, never by changing user DOM.
+- The select builds the option data list itself (`value`, `label`, `disabled`, `defaultSelected`) from its `ce-option` children.
 
 ### Phase 3: single select (plain)
 

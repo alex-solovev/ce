@@ -1,4 +1,5 @@
 import "../ce-icon/ce-icon.ts";
+import { defineElement, requireElement } from "../core/dom.ts";
 import { FormControl } from "../core/form-control.ts";
 import {
   labelMarkup,
@@ -202,12 +203,8 @@ export class CeInput extends FormControl {
     const root = this.attachShadow({ mode: "open", delegatesFocus: true });
     root.append(template.content.cloneNode(true));
 
-    const input = root.querySelector("input");
-    const clearButton = root.querySelector("button");
-
-    if (!input || !clearButton) {
-      return;
-    }
+    const input = requireElement(root, "input", HTMLInputElement);
+    const clearButton = requireElement(root, "[part='clear-button']", HTMLButtonElement);
 
     input.addEventListener("input", this.#onInput);
     input.addEventListener("change", this.#onChange);
@@ -330,6 +327,4 @@ declare global {
   }
 }
 
-if (!customElements.get("ce-input")) {
-  customElements.define("ce-input", CeInput);
-}
+defineElement("ce-input", CeInput);

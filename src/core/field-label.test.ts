@@ -100,7 +100,7 @@ describe("updateFieldLabel", () => {
 
     const control = query(root, "input");
 
-    expect(() => updateFieldLabel(host, root, control)).toThrow(/labelMarkup/);
+    expect(() => updateFieldLabel(host, root, control)).toThrow(/label\[part='label'\]/);
   });
 });
 

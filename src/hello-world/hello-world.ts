@@ -1,3 +1,5 @@
+import { defineElement, requireElement } from "../core/dom.ts";
+
 const template = document.createElement("template");
 template.innerHTML = `
   <style>
@@ -57,7 +59,7 @@ export class HelloWorld extends HTMLElement {
     const root = this.attachShadow({ mode: "open" });
     root.append(template.content.cloneNode(true));
 
-    this.#greeting = root.querySelector("span");
+    this.#greeting = requireElement(root, "[part='greeting']", HTMLSpanElement);
   }
 
   #updateGreeting() {
@@ -75,6 +77,4 @@ declare global {
   }
 }
 
-if (!customElements.get("hello-world")) {
-  customElements.define("hello-world", HelloWorld);
-}
+defineElement("hello-world", HelloWorld);

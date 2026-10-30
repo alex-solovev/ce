@@ -1,3 +1,4 @@
+import { defineElement } from "../core/dom.ts";
 import { getIcon, unwatchIconLibraries, watchIconLibraries } from "./icon-library.ts";
 
 const styles = new CSSStyleSheet();
@@ -157,6 +158,4 @@ declare global {
   }
 }
 
-if (!customElements.get("ce-icon")) {
-  customElements.define("ce-icon", CeIcon);
-}
+defineElement("ce-icon", CeIcon);

@@ -2,6 +2,8 @@
 // `label` slot. Lives in the same shadow root as the control, so it can name
 // it directly. External `<label>` elements aren't supported.
 
+import { requireElement } from "./dom.ts";
+
 /** `<label part="label">` with a `label` slot, to put in a form control's shadow root. */
 export const labelMarkup: string = `<label part="label" hidden><slot name="label"></slot></label>`;
 
@@ -63,12 +65,8 @@ type LabelElements = {
 };
 
 function findLabel(root: ShadowRoot): LabelElements {
-  const label = root.querySelector("label[part='label']");
-  const slot = label?.querySelector("slot[name='label']");
-
-  if (!(label instanceof HTMLLabelElement) || !(slot instanceof HTMLSlotElement)) {
-    throw new Error("Shadow root has no labelMarkup");
-  }
+  const label = requireElement(root, "label[part='label']", HTMLLabelElement);
+  const slot = requireElement(label, "slot[name='label']", HTMLSlotElement);
 
   return { label, slot };
 }
