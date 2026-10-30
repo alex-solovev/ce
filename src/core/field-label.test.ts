@@ -116,6 +116,31 @@ describe("setupFieldLabel", () => {
     expect(root.activeElement).toBe(control);
   });
 
+  it("doesn't focus the control of a disabled form control", () => {
+    class DisabledControl extends HTMLElement {
+      static formAssociated = true;
+    }
+
+    customElements.define("field-label-disabled-control", DisabledControl);
+
+    const host = new DisabledControl();
+    host.setAttribute("disabled", "");
+    host.setAttribute("label", "First name");
+
+    const root = host.attachShadow({ mode: "open" });
+    root.innerHTML = `${labelMarkup}<div tabindex="-1"></div>`;
+    document.body.append(host);
+
+    const label = query(root, "label");
+    const control = query<HTMLElement>(root, "div");
+
+    setupFieldLabel(host, root, control);
+    updateFieldLabel(host, root, control);
+    label.click();
+
+    expect(root.activeElement).toBe(null);
+  });
+
   it("updates when content is slotted or removed", async () => {
     const { host, root, label, slot, control } = render();
 

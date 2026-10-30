@@ -49,6 +49,8 @@ template.innerHTML = `
 
     :host(:state(blank)) [part="display"] { opacity: 0.6; }
 
+    [part="selected-option"]:not(:last-child)::after { content: ", "; }
+
     [part="chevron"] { flex: none; }
     :host(:state(open)) [part="chevron"] { rotate: 180deg; }
 
@@ -91,22 +93,24 @@ template.innerHTML = `
 const OPTION_ATTRIBUTES = ["value", "disabled", "selected"];
 
 /**
- * Single select (WAI-ARIA select-only combobox). Options are `ce-option`
- * children.
+ * Select (WAI-ARIA select-only combobox), single or `multiple`. Options are
+ * `ce-option` children.
  *
  * @attr placeholder - Shown when nothing is selected.
+ * @attr multiple - Allows selecting several options.
  * @slot - `ce-option` elements.
  * @slot label - Rich label content. Overrides the `label` attribute.
  * @csspart label - The label.
  * @csspart base - The trigger box.
- * @csspart display - The selected option's label, or the placeholder.
+ * @csspart display - The selected options' labels, or the placeholder.
+ * @csspart selected-option - One selected option's label, with its value in `data-value`.
  * @csspart chevron - The chevron icon.
  * @csspart listbox - The popup with the options.
- * @fires input - When the user selects an option.
- * @fires change - When the user selects an option.
+ * @fires input - When the user changes the selection.
+ * @fires change - When the user changes the selection.
  */
 export class CeSelect extends FormControl {
-  static observedAttributes: string[] = ["placeholder", "label"];
+  static observedAttributes: string[] = ["placeholder", "label", "multiple", "name"];
 
   #initialized = false;
 
@@ -125,13 +129,58 @@ export class CeSelect extends FormControl {
     this.#onMutations(records);
   });
 
-  /** The selected value, or "" when nothing is selected. Doesn't reflect. */
+  /**
+   * The first selected value, or "" when nothing is selected, like native
+   * `<select>`. Setting it selects just that value; "" clears.
+   */
   get value(): string {
     return formValues(this.#state)[0] ?? "";
   }
 
   set value(value: string) {
     this.#dispatch({ type: "SET_VALUE", values: value === "" ? [] : [value] });
+  }
+
+  /**
+   * All selected values in selection order, including values whose option
+   * isn't currently among the children.
+   */
+  get values(): string[] {
+    return formValues(this.#state);
+  }
+
+  set values(values: string[]) {
+    this.#dispatch({ type: "SET_VALUE", values });
+  }
+
+  /** The selected `ce-option` elements in document order, like native `<select>`. */
+  get selectedOptions(): CeOption[] {
+    const result: CeOption[] = [];
+    const seen = new Set<string>();
+
+    for (const element of this.querySelectorAll("ce-option")) {
+      // Only the first of duplicate values counts.
+      if (seen.has(element.value)) {
+        continue;
+      }
+
+      seen.add(element.value);
+
+      if (isSelected(this.#state, element.value)) {
+        result.push(element);
+      }
+    }
+
+    return result;
+  }
+
+  /** Reflects the `multiple` attribute. */
+  get multiple(): boolean {
+    return this.hasAttribute("multiple");
+  }
+
+  set multiple(value: boolean) {
+    this.toggleAttribute("multiple", Boolean(value));
   }
 
   /** Reflects the `placeholder` attribute. */
@@ -157,6 +206,7 @@ export class CeSelect extends FormControl {
       attributeFilter: OPTION_ATTRIBUTES,
     });
 
+    this.#dispatch({ type: "CONFIG", config: { multiple: this.multiple } });
     this.#syncOptions();
     this.#updateDisabled();
     this.#updateLabel();
@@ -186,9 +236,26 @@ export class CeSelect extends FormControl {
       this.#updateLabel();
       return;
     }
+
+    if (name === "multiple") {
+      this.#dispatch({ type: "CONFIG", config: { multiple: this.multiple } });
+      return;
+    }
+
+    // The form value of multiple selects is keyed by name.
+    if (name === "name") {
+      this.#renderSelection();
+      return;
+    }
   }
 
   formDisabledCallback(): void {
+    // Can run before connectedCallback, before the options are upgraded;
+    // connectedCallback applies the disabled state itself.
+    if (!this.#initialized) {
+      return;
+    }
+
     this.#updateDisabled();
   }
 
@@ -197,11 +264,25 @@ export class CeSelect extends FormControl {
   }
 
   formStateRestoreCallback(state: string | File | FormData | null): void {
-    if (typeof state !== "string") {
+    if (typeof state === "string") {
+      this.#dispatch({ type: "RESTORE", values: [state] });
       return;
     }
 
-    this.#dispatch({ type: "RESTORE", values: [state] });
+    if (!(state instanceof FormData)) {
+      return;
+    }
+
+    // Multiple: the FormData saved by #renderSelection, one entry per value.
+    const values: string[] = [];
+
+    for (const [, value] of state) {
+      if (typeof value === "string") {
+        values.push(value);
+      }
+    }
+
+    this.#dispatch({ type: "RESTORE", values });
   }
 
   #setup() {
@@ -266,6 +347,8 @@ export class CeSelect extends FormControl {
 
     if (changes.has("config")) {
       this.#renderDisabled();
+      this.#renderMultiple();
+      this.#renderOptions();
     }
   }
 
@@ -329,13 +412,55 @@ export class CeSelect extends FormControl {
       return;
     }
 
-    const text = displayText(this.#state);
     const blank = this.#state.selection.length === 0;
 
-    this.#display.textContent = blank ? this.placeholder : text;
     setState(this.internals, "blank", blank);
+    this.#display.title = blank ? "" : displayText(this.#state);
+    this.internals.setFormValue(this.#formValue());
 
-    this.internals.setFormValue(blank ? null : this.value);
+    if (blank) {
+      this.#display.textContent = this.placeholder;
+      return;
+    }
+
+    // One span per label, so they can be styled or replaced later. Commas
+    // come from CSS.
+    const spans: HTMLSpanElement[] = [];
+
+    for (const selected of this.#state.selection) {
+      const span = document.createElement("span");
+      span.part.add("selected-option");
+      span.dataset.value = selected.value;
+      span.textContent = selected.label ?? selected.value;
+      spans.push(span);
+    }
+
+    this.#display.replaceChildren(...spans);
+  }
+
+  /** Single: the value. Multiple: one `name=value` entry per value. */
+  #formValue(): string | FormData | null {
+    const values = formValues(this.#state);
+
+    if (values.length === 0) {
+      return null;
+    }
+
+    if (!this.#state.config.multiple) {
+      return values[0] ?? null;
+    }
+
+    if (this.name === "") {
+      return null;
+    }
+
+    const data = new FormData();
+
+    for (const value of values) {
+      data.append(this.name, value);
+    }
+
+    return data;
   }
 
   #renderOpen() {
@@ -382,7 +507,7 @@ export class CeSelect extends FormControl {
         selected: !duplicate && isSelected(this.#state, value),
         highlighted: !duplicate && highlighted === value,
         filteredOut: false,
-        showCheck: false,
+        showCheck: this.#state.config.multiple,
       });
     }
   }
@@ -410,8 +535,24 @@ export class CeSelect extends FormControl {
 
     const disabled = this.#state.config.disabled;
 
-    this.#trigger.tabIndex = disabled ? -1 : 0;
     this.#trigger.ariaDisabled = disabled ? "true" : null;
+
+    // No tabindex at all, not -1: with delegatesFocus, pressing anywhere in
+    // the component would still focus a tabindex="-1" trigger.
+    if (disabled) {
+      this.#trigger.removeAttribute("tabindex");
+      return;
+    }
+
+    this.#trigger.tabIndex = 0;
+  }
+
+  #renderMultiple() {
+    if (!this.#listbox) {
+      return;
+    }
+
+    this.#listbox.ariaMultiSelectable = this.#state.config.multiple ? "true" : null;
   }
 
   #updateDisabled() {
@@ -478,19 +619,29 @@ export class CeSelect extends FormControl {
       return;
     }
 
-    // Tab picks the highlighted option and lets focus move on.
+    const multiple = this.#state.config.multiple;
+
+    // Tab lets focus move on. Single: picks the highlighted option first.
     if (key === "Tab") {
-      this.#dispatch({ type: "SELECT_HIGHLIGHTED" }, true);
+      this.#dispatch({ type: multiple ? "CLOSE" : "SELECT_HIGHLIGHTED" }, true);
       return;
     }
 
-    if (key === "Enter" || (key === "ArrowUp" && event.altKey)) {
+    // Single: select and close. Multiple: just close.
+    if (key === "ArrowUp" && event.altKey) {
+      event.preventDefault();
+      this.#dispatch({ type: multiple ? "CLOSE" : "SELECT_HIGHLIGHTED" }, true);
+      return;
+    }
+
+    // Single: select and close. Multiple: toggle and stay open.
+    if (key === "Enter") {
       event.preventDefault();
       this.#dispatch({ type: "SELECT_HIGHLIGHTED" }, true);
       return;
     }
 
-    // Space continues a type-ahead search ("New York"), otherwise selects.
+    // Space continues a type-ahead search ("New York"), otherwise like Enter.
     if (key === " " && !this.#isTyping(event)) {
       event.preventDefault();
       this.#dispatch({ type: "SELECT_HIGHLIGHTED" }, true);
@@ -555,7 +706,9 @@ export class CeSelect extends FormControl {
       return;
     }
 
-    this.#dispatch({ type: "SELECT", value: option.value }, true);
+    const type = this.#state.config.multiple ? "TOGGLE" : "SELECT";
+
+    this.#dispatch({ type, value: option.value }, true);
     this.#trigger?.focus();
   };
 

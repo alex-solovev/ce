@@ -125,7 +125,7 @@ Each phase ends with tests passing and a demo update, ready for review.
   - **Decisions:** Enter while closed opens (APG), not implicit submit. Tab selects (APG), unlike `wa-select`.
 - Mouse: `mousedown` on the trigger toggles (and keeps focus); options select on `mouseup`, so press-drag-release works; `pointermove` highlights (not `mouseover`, so keyboard scrolling under a still pointer doesn't move it); `mousedown` in the listbox keeps focus on the trigger; `mousedown` outside closes (document listener only while open).
 - Focus leaving the component → `BLUR`.
-- Form: `setFormValue(value)` or `null`; reset → `RESET`, restore → `RESTORE`, disabled (attribute or fieldset) → `CONFIG`, plus `tabindex="-1"` and `aria-disabled`.
+- Form: `setFormValue(value)` or `null`; reset → `RESET`, restore → `RESTORE`, disabled (attribute or fieldset) → `CONFIG`, plus no `tabindex` (not `-1`, which `delegatesFocus` would still focus) and `aria-disabled`.
 - `value` property: `""` when nothing is selected; setting `""` clears.
 - Custom states on the host: `:state(blank)`, `:state(open)`.
 - Option data is built from `ce-option` children by one `MutationObserver` (from phase 4, see below).
@@ -135,14 +135,20 @@ Each phase ends with tests passing and a demo update, ready for review.
 - Done in phase 3: one `MutationObserver` on the host (`childList`, `subtree`, `characterData`, attributes `value` / `disabled` / `selected`). Each batch → `refresh()` on options whose text changed, then one `OPTIONS_CHANGED`. A value set before options exist is labelled when they arrive; replacing all options keeps the selection and its labels.
 - Remaining: `options` setter (`[{ value, label, disabled, selected }]` → generated `ce-option` children; getter returns the snapshot).
 
-### Phase 5: multiple
+### Phase 5: multiple — done
 
-- `multiple` attribute: `TOGGLE` instead of `SELECT`; listbox stays open; `aria-multiselectable` on the listbox.
-- Keyboard: `Space` toggles highlighted, `Enter` toggles and keeps open, `Escape` closes.
-- Display: selected labels comma-separated in selection order, single line, `text-overflow: ellipsis`. Full text in `title`.
-- Selected values that aren't among the current options still count, are submitted, and show their stored label.
-- Form value: `FormData` with one entry per value under `name`. Rebuild when `name` changes.
-- `value` property: `string[]` in multiple mode, `string` in single mode.
+- `multiple` attribute (reflected) → `CONFIG`; applied before the first option sync so the default selection is all options marked `selected`.
+- API, following native `<select>` plus one addition:
+  - `value`: first selected value, or `""`; setting it selects just that value (`""` clears).
+  - `selectedOptions`: selected `ce-option` elements in document order (first of duplicate values only).
+  - `values: string[]` (get / set): every selected value in selection order, **including values without a current option**, which `selectedOptions` can't list.
+- Display: each selected label is a `<span part="selected-option" data-value="…">` (also in single mode), so they can be restyled or replaced by custom elements later. Commas come from CSS (`::after`), not text. Single line with ellipsis; full text in the display's `title`.
+- Keyboard (open, multiple): `Enter` toggles and stays open; `Space` likewise unless a type-ahead is in progress; `Escape` / `Alt+↑` / `Tab` close without toggling.
+- Mouse: `mouseup` on an option toggles; the list stays open and focus stays on the trigger.
+- `aria-multiselectable` on the listbox; options get `showCheck` (check mark column).
+- Form: `FormData` with one `name=value` entry per value, in selection order; rebuilt when `name` changes; nothing without a name. Restore reads the values back from that `FormData`; reset → every option marked `selected`.
+- Turning `multiple` off keeps the first selected value.
+- `input` + `change` on every user toggle.
 
 ### Phase 6: searchable
 

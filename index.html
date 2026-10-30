@@ -8,6 +8,13 @@
     <script type="module" src="/src/ce-input/ce-input.ts"></script>
     <script type="module" src="/src/ce-icon/ce-icon.ts"></script>
     <script type="module" src="/src/ce-select/ce-select.ts"></script>
+    <style>
+      ce-input,
+      ce-select {
+        max-width: 100%;
+        width: fit-content;
+      }
+    </style>
   </head>
   <body>
     <p><hello-world></hello-world></p>
@@ -40,6 +47,53 @@
           <ce-option value="cherry" disabled>Cherry (out of season)</ce-option>
           <ce-option value="date" selected>Date</ce-option>
           <ce-option value="elderberry">Elderberry</ce-option>
+          <ce-option value="fig">Fig</ce-option>
+          <ce-option value="grape">Grape</ce-option>
+          <ce-option value="honeydew">
+            Honeydew melon
+            <span slot="description">Pale green flesh, very sweet when ripe in late summer</span>
+          </ce-option>
+          <ce-option value="kiwi">Kiwi</ce-option>
+          <ce-option value="lemon">Lemon</ce-option>
+          <ce-option value="lime" disabled>Lime</ce-option>
+          <ce-option value="mango">Mango</ce-option>
+          <ce-option value="nectarine">Nectarine</ce-option>
+          <ce-option value="orange">Orange</ce-option>
+          <ce-option value="papaya">Papaya</ce-option>
+          <ce-option value="quince">Quince</ce-option>
+          <ce-option value="raspberry">Raspberry</ce-option>
+          <ce-option value="strawberry">Strawberry</ce-option>
+          <ce-option value="tangerine">Tangerine</ce-option>
+          <ce-option value="ugli"
+            >Ugli fruit, a Jamaican tangelo with a very long name for overflow</ce-option
+          >
+          <ce-option value="watermelon">Watermelon</ce-option>
+        </ce-select>
+      </p>
+      <p>
+        <ce-select name="toppings" label="Toppings" placeholder="None" multiple>
+          <ce-option value="cheese" selected>Cheese</ce-option>
+          <ce-option value="mushrooms">Mushrooms</ce-option>
+          <ce-option value="olives" selected>
+            Olives
+            <span slot="description">Green or black</span>
+          </ce-option>
+          <ce-option value="peppers">Peppers</ce-option>
+          <ce-option value="pineapple" disabled>Pineapple</ce-option>
+          <ce-option value="onions" selected>Red onions</ce-option>
+          <ce-option value="jalapenos">Jalapeños</ce-option>
+          <ce-option value="ham" selected>Ham</ce-option>
+          <ce-option value="pepperoni">Pepperoni</ce-option>
+          <ce-option value="anchovies">
+            Anchovies
+            <span slot="description">Salty, an acquired taste for some people</span>
+          </ce-option>
+          <ce-option value="basil" selected>Fresh basil</ce-option>
+          <ce-option value="spinach">Spinach</ce-option>
+          <ce-option value="artichokes">Artichoke hearts</ce-option>
+          <ce-option value="sun-dried-tomatoes">Sun-dried tomatoes</ce-option>
+          <ce-option value="garlic">Roasted garlic</ce-option>
+          <ce-option value="extra-cheese">Extra cheese, double portion, melted on top</ce-option>
         </ce-select>
       </p>
       <fieldset id="group">
@@ -49,6 +103,17 @@
           <ce-option value="s">Small</ce-option>
           <ce-option value="m">Medium</ce-option>
           <ce-option value="l">Large</ce-option>
+          <ce-option value="xs">Extra small</ce-option>
+          <ce-option value="xl">Extra large</ce-option>
+          <ce-option value="xxl">
+            Extra extra large
+            <span slot="description">Only in some colours</span>
+          </ce-option>
+          <ce-option value="xxxl" disabled>Extra extra extra large (sold out)</ce-option>
+          <ce-option value="kids-s">Kids small</ce-option>
+          <ce-option value="kids-m">Kids medium</ce-option>
+          <ce-option value="kids-l">Kids large</ce-option>
+          <ce-option value="one-size">One size fits most, adjustable strap</ce-option>
         </ce-select>
       </fieldset>
       <p>

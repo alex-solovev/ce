@@ -27,6 +27,12 @@ export function setupFieldLabel(host: HTMLElement, root: ShadowRoot, control: HT
   });
 
   label.addEventListener("click", () => {
+    // A disabled control can't be focused, even if `focus()` would allow it
+    // (e.g. a trigger with tabindex="-1").
+    if (host.matches(":disabled")) {
+      return;
+    }
+
     control.focus();
   });
 }
