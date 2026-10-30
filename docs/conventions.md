@@ -13,12 +13,15 @@ Every component follows the same shape so deviations stand out in review.
 `attributeChangedCallback` only fires on attribute mutations, not property assignment. Route the setter through the attribute so both paths (`el.disabled = true` and `<my-el disabled>`) end up in one handler, with no double-firing.
 
 ```js
-static observedAttributes = ['disabled'];
+static observedAttributes = ["disabled"];
 
-get disabled() { return this.hasAttribute('disabled'); }
-set disabled(val) {
+get disabled() {
+  return this.hasAttribute("disabled");
+}
+
+set disabled(value) {
   // attributeChangedCallback reacts; don't call the handler here
-  this.toggleAttribute('disabled', Boolean(val));
+  this.toggleAttribute("disabled", Boolean(value));
 }
 ```
 
@@ -30,19 +33,33 @@ set disabled(val) {
 #initialized = false;
 
 connectedCallback() {
-  this._setup(); // shadow DOM, internals, listeners
-  this.#initialized = true;
+  if (!this.#initialized) {
+    this.#setup(); // shadow DOM, listeners
+    this.#initialized = true;
+  }
+
+  this.#updateDisabled();
 }
 
-attributeChangedCallback(name, oldVal, newVal) {
-  if (!this.#initialized || oldVal === newVal) return;
-  if (name === 'disabled') this._handleDisabledChange(newVal !== null);
+attributeChangedCallback(name, oldValue, newValue) {
+  if (!this.#initialized) {
+    return;
+  }
+
+  if (oldValue === newValue) {
+    return;
+  }
+
+  if (name === "disabled") {
+    this.#updateDisabled();
+    return;
+  }
 }
 ```
 
 ## 4. Small imperative update functions
 
-One function per concern (`_handleDisabledChange`, `_moveHighlight`). Each is independently testable with synchronous assertions.
+One function per concern (`#updateDisabled`, `#moveHighlight`). Each is independently testable with synchronous assertions.
 
 ## 5. Observer and listener teardown
 
@@ -51,3 +68,39 @@ Anything started in `connectedCallback` (observers, global listeners) is torn do
 ## 6. Platform APIs over custom machinery
 
 Prefer `ElementInternals` (forms, ARIA, `states` for `:state(...)` CSS) and `MutationObserver` over hand-rolled equivalents.
+
+## 7. Code style
+
+Procedural and spacious: more lines are fine if each step reads on its own.
+
+- **Early returns instead of `else` / `else if` chains.** Handle the exceptional case and return, then do the main thing.
+- **Simple conditions.** Short combinations like `!this.#initialized || oldValue === newValue` are fine; split an `if` when its condition gets hard to read at a glance or a part needs its own comment.
+- **Always use braces**, even for one-line bodies.
+- **Blank lines between logical steps.**
+- **Plain loops instead of array methods** (`find`, `map`, `filter`, `some`…) where possible.
+- **Don't extract single-use helpers** that only wrap a loop or a couple of lines; inline them.
+
+```js
+export function submitImplicitly(control) {
+  const form = control.form;
+
+  if (!form) {
+    return;
+  }
+
+  for (const element of form.elements) {
+    if (!isSubmitButton(element)) {
+      continue;
+    }
+
+    if (element.matches(":disabled")) {
+      return;
+    }
+
+    element.click();
+    return;
+  }
+
+  form.requestSubmit();
+}
+```

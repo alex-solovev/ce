@@ -5,9 +5,51 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>custom-elements</title>
     <script type="module" src="/src/hello-world.js"></script>
+    <script type="module" src="/src/ce-input.js"></script>
   </head>
   <body>
     <p><hello-world></hello-world></p>
     <p><hello-world name="custom elements"></hello-world></p>
+
+    <h2>ce-input</h2>
+    <form id="demo">
+      <p>
+        <label for="first">First name</label>
+        <ce-input id="first" name="first" placeholder="Ada"></ce-input>
+      </p>
+      <p>
+        <label>Last name <ce-input name="last" value="Lovelace"></ce-input></label>
+      </p>
+      <p>
+        <label>Disabled <ce-input name="skipped" value="not submitted" disabled></ce-input></label>
+      </p>
+      <fieldset id="group">
+        <legend>Fieldset</legend>
+        <label>City <ce-input name="city" value="London"></ce-input></label>
+      </fieldset>
+      <p>
+        <label><input type="checkbox" id="toggle-group" /> Disable fieldset</label>
+      </p>
+      <p>
+        <button type="submit">Submit</button>
+        <button type="reset">Reset</button>
+      </p>
+    </form>
+    <p>Submitted: <output id="result" form="demo"></output></p>
+
+    <script type="module">
+      const form = document.querySelector("#demo");
+      const result = document.querySelector("#result");
+      const group = document.querySelector("#group");
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        result.value = new URLSearchParams(new FormData(form)).toString();
+      });
+
+      document.querySelector("#toggle-group").addEventListener("change", (event) => {
+        group.disabled = event.target.checked;
+      });
+    </script>
   </body>
 </html>

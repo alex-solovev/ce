@@ -10,6 +10,7 @@ export class HelloWorld extends HTMLElement {
   static observedAttributes = ["name"];
 
   #initialized = false;
+
   /** @type {HTMLSpanElement | null} */
   #greeting = null;
 
@@ -27,6 +28,7 @@ export class HelloWorld extends HTMLElement {
       this.#setup();
       this.#initialized = true;
     }
+
     this.#updateGreeting();
   }
 
@@ -36,18 +38,33 @@ export class HelloWorld extends HTMLElement {
    * @param {string | null} newValue
    */
   attributeChangedCallback(name, oldValue, newValue) {
-    if (!this.#initialized || oldValue === newValue) return;
-    if (name === "name") this.#updateGreeting();
+    if (!this.#initialized) {
+      return;
+    }
+
+    if (oldValue === newValue) {
+      return;
+    }
+
+    if (name === "name") {
+      this.#updateGreeting();
+      return;
+    }
   }
 
   #setup() {
     const root = this.attachShadow({ mode: "open" });
     root.append(template.content.cloneNode(true));
+
     this.#greeting = root.querySelector("span");
   }
 
   #updateGreeting() {
-    if (this.#greeting) this.#greeting.textContent = `Hello, ${this.name}!`;
+    if (!this.#greeting) {
+      return;
+    }
+
+    this.#greeting.textContent = `Hello, ${this.name}!`;
   }
 }
 
