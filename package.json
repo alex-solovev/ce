@@ -4,7 +4,8 @@
   "type": "module",
   "module": "index.ts",
   "scripts": {
-    "prepare": "vp config"
+    "prepare": "vp config",
+    "dev": "vp run"
   },
   "devDependencies": {
     "@types/bun": "latest",
