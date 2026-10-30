@@ -185,6 +185,15 @@ export function toggleOption(state: State, value: string, changes: Changes = new
       ...state.selection,
       { value: option.value, label: option.label },
     ]);
+
+    // A pick ends the search, like a recipient field: every option shows
+    // again, with the picked one highlighted.
+    if (state.query !== null && state.query !== "") {
+      set(state, changes, "query", null);
+      syncNavigation(state, changes);
+      track(changes, navigation.highlightValue(state.navigation, value));
+    }
+
     return changes;
   }
 

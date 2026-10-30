@@ -1559,13 +1559,55 @@ describe("ce-select", () => {
       expect(select.values).toEqual(["banana"]);
       expect(selectedSpans(select)).toEqual(["banana:Banana"]);
       expect(isOpen(select)).toBe(true);
-      expect(input.value).toBe("an");
+      expect(input.value).toBe("");
       expect(input.placeholder).toBe("");
 
       await userEvent.keyboard("{Escape}");
 
       expect(input.value).toBe("");
       expect(selectedSpans(select)).toEqual(["banana:Banana"]);
+    });
+
+    it("multiple: picking with Enter clears the search and shows every option", async () => {
+      const { select } = render(
+        `<ce-select name="fruit" searchable multiple>${fruits}</ce-select>`,
+      );
+
+      await focusAndType(select, "ban{Enter}");
+
+      expect(select.values).toEqual(["banana"]);
+      expect(searchInput(select).value).toBe("");
+      expect(shownValues(select)).toEqual(["apple", "banana", "cherry", "date"]);
+      expect(isOpen(select)).toBe(true);
+      expect(option(select, "banana").matches(":state(highlighted)")).toBe(true);
+    });
+
+    it("multiple: picking with a click clears the search and keeps focus in the input", async () => {
+      const { select } = render(
+        `<ce-select name="fruit" searchable multiple>${fruits}</ce-select>`,
+      );
+
+      await focusAndType(select, "ate");
+      await userEvent.click(option(select, "date"));
+
+      expect(select.values).toEqual(["date"]);
+      expect(searchInput(select).value).toBe("");
+      expect(shownValues(select)).toEqual(["apple", "banana", "cherry", "date"]);
+      expect(isOpen(select)).toBe(true);
+      expect(select.shadowRoot?.activeElement).toBe(searchInput(select));
+    });
+
+    it("multiple: unticking keeps the search", async () => {
+      const { select } = render(
+        `<ce-select name="fruit" searchable multiple>${fruits}</ce-select>`,
+      );
+
+      select.values = ["banana"];
+      await focusAndType(select, "ban{Enter}");
+
+      expect(select.values).toEqual([]);
+      expect(searchInput(select).value).toBe("ban");
+      expect(shownValues(select)).toEqual(["banana"]);
     });
 
     it("can be switched on and off at runtime", async () => {

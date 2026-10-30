@@ -328,6 +328,23 @@ describe("filter", () => {
     expect(context.rendered.hidden).toEqual(new Set());
   });
 
+  it("shows every option again once adding a value clears the search", () => {
+    const { host, context } = setup(fruits, { searchable: true, multiple: true });
+
+    logic.search(context.state, "an");
+    render.filter(context, true);
+    render.input(context);
+    expect(context.refs.input.value).toBe("an");
+
+    logic.toggleOption(context.state, "banana");
+    render.filter(context, true);
+    render.input(context);
+
+    expect(context.refs.input.value).toBe("");
+    expect(element(host, "apple").matches(":state(filtered-out)")).toBe(false);
+    expect(context.rendered.hidden).toEqual(new Set());
+  });
+
   it("updates only options whose visibility changed", () => {
     const { context } = setup(fruits, { searchable: true });
 

@@ -213,6 +213,63 @@ describe("toggleOption", () => {
     expectNoChange(single, (s) => logic.toggleOption(s, "apple"));
     expectNoChange(multiple, (s) => logic.toggleOption(s, "cherry"));
   });
+
+  it("clears the search after adding a value, showing every option again", () => {
+    const state = run(withOptions({ searchable: true, multiple: true }), (s) =>
+      logic.search(s, "ate"),
+    );
+    const changes = logic.toggleOption(state, "date");
+    logic.checkInvariants(state);
+
+    expect(logic.formValues(state)).toEqual(["date"]);
+    expect(state.query).toBe(null);
+    expect(state.open).toBe(true);
+    expect(changes.has("query")).toBe(true);
+    expect(logic.visibleOptions(state)).toEqual(fruits);
+  });
+
+  it("highlights the added value after clearing the search", () => {
+    const state = run(
+      withOptions({ searchable: true, multiple: true }),
+      (s) => logic.search(s, "a"),
+      (s) => logic.toggleOption(s, "date"),
+    );
+
+    expect(state.navigation.highlighted).toBe("date");
+  });
+
+  it("keeps the search after removing a value", () => {
+    const state = run(
+      withOptions({ searchable: true, multiple: true }),
+      (s) => logic.setValues(s, ["date"]),
+      (s) => logic.search(s, "ate"),
+      (s) => logic.toggleOption(s, "date"),
+    );
+
+    expect(logic.formValues(state)).toEqual([]);
+    expect(state.query).toBe("ate");
+  });
+
+  it("keeps erased search text as is after adding a value", () => {
+    const state = run(
+      withOptions({ searchable: true, multiple: true }),
+      (s) => logic.search(s, ""),
+      (s) => logic.toggleOption(s, "date"),
+    );
+
+    expect(state.query).toBe("");
+  });
+
+  it("leaves the query alone when not searchable", () => {
+    const state = run(
+      withOptions({ multiple: true }),
+      (s) => logic.openList(s),
+      (s) => logic.toggleOption(s, "date"),
+    );
+
+    expect(state.query).toBe(null);
+    expect(state.navigation.highlighted).toBe("apple");
+  });
 });
 
 describe("selectHighlighted", () => {
@@ -232,6 +289,18 @@ describe("selectHighlighted", () => {
     expect(single.open).toBe(false);
     expect(logic.formValues(multiple)).toEqual(["apple"]);
     expect(multiple.open).toBe(true);
+  });
+
+  it("clears the search after toggling the highlighted option on", () => {
+    const state = run(
+      withOptions({ searchable: true, multiple: true }),
+      (s) => logic.search(s, "ban"),
+      (s) => logic.selectHighlighted(s),
+    );
+
+    expect(logic.formValues(state)).toEqual(["banana"]);
+    expect(state.query).toBe(null);
+    expect(state.navigation.highlighted).toBe("banana");
   });
 
   it("does nothing without a highlight", () => {
