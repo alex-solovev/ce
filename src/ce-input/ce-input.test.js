@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser/context";
+import { accessibleNodesWithRole } from "../core/test-accessibility.js";
 import "./ce-input.js";
 
 afterEach(() => {
@@ -259,6 +260,62 @@ describe("ce-input", () => {
       expect(events).toEqual(["input", "change"]);
       expect(input.shadowRoot?.activeElement).toBe(innerInput(input));
       expect(clearButton(input).hidden).toBe(true);
+    });
+  });
+
+  describe("label", () => {
+    /** @param {Element} host */
+    function label(host) {
+      const element = host.shadowRoot?.querySelector("[part='label']");
+
+      if (!(element instanceof HTMLLabelElement)) {
+        throw new Error("ce-input has no label");
+      }
+
+      return element;
+    }
+
+    it("names the input by the label attribute", async () => {
+      const form = renderForm(`<ce-input name="first" label="First name"></ce-input>`);
+
+      expect(label(form.querySelector("ce-input")).hidden).toBe(false);
+      expect(await accessibleNodesWithRole("textbox")).toEqual(["textbox:First name"]);
+    });
+
+    it("names the input by slotted label content", async () => {
+      const form = renderForm(`
+        <ce-input name="first" label="Ignored">
+          <span slot="label">First <em>name</em></span>
+        </ce-input>
+      `);
+
+      expect(label(form.querySelector("ce-input")).hidden).toBe(false);
+      expect(await accessibleNodesWithRole("textbox")).toEqual(["textbox:First name"]);
+    });
+
+    it("follows label attribute changes", async () => {
+      const form = renderForm(`<ce-input name="first" label="First name"></ce-input>`);
+      const input = form.querySelector("ce-input");
+
+      input.label = "Given name";
+
+      expect(await accessibleNodesWithRole("textbox")).toEqual(["textbox:Given name"]);
+    });
+
+    it("focuses the input when clicked", async () => {
+      const form = renderForm(`<ce-input name="first" label="First name"></ce-input>`);
+      const input = form.querySelector("ce-input");
+
+      await userEvent.click(label(input));
+
+      expect(input.shadowRoot?.activeElement).toBe(innerInput(input));
+    });
+
+    it("is hidden without a label, leaving the placeholder as the name", async () => {
+      const form = renderForm(`<ce-input name="query" placeholder="Search"></ce-input>`);
+
+      expect(label(form.querySelector("ce-input")).hidden).toBe(true);
+      expect(await accessibleNodesWithRole("textbox")).toEqual(["textbox:Search"]);
     });
   });
 });

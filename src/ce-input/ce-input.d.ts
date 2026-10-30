@@ -6,9 +6,11 @@ import { FormControl } from "../core/form-control.js";
  * @attr value - Default value, restored on form reset.
  * @attr placeholder - Placeholder text.
  * @attr with-clear - Shows a button that clears the value.
+ * @slot label - Rich label content. Overrides the `label` attribute.
  * @slot start - Decorative content before the input, such as an unlabeled `<ce-icon>`. Not for interactive content.
  * @slot end - Decorative content after the input. Not for interactive content.
  * @slot clear-icon - Replaces the clear button's default icon.
+ * @csspart label - The label.
  * @csspart base - The box around the input and slots.
  * @csspart input - The inner native input.
  * @csspart clear-button - The clear button.

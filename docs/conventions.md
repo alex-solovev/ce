@@ -69,7 +69,11 @@ Anything started in `connectedCallback` (observers, global listeners) is torn do
 
 Prefer `ElementInternals` (forms, ARIA, `states` for `:state(...)` CSS) and `MutationObserver` over hand-rolled equivalents.
 
-## 7. Code style
+## 7. Labels
+
+Form controls are labelled by their own `label` attribute or `label` slot (`setupFieldLabel` / `updateFieldLabel` in `src/core/field-label.js`), never by external `<label for>` or a wrapping `<label>`. An external label names the host, not the focusable element inside the shadow DOM, so screen readers would announce an unnamed control while clicking the label still appears to work.
+
+## 8. Code style
 
 Procedural and spacious: more lines are fine if each step reads on its own.
 
@@ -79,6 +83,7 @@ Procedural and spacious: more lines are fine if each step reads on its own.
 - **Blank lines between logical steps.**
 - **Plain loops instead of array methods** (`find`, `map`, `filter`, `some`…) where possible.
 - **Don't extract single-use helpers** that only wrap a loop or a couple of lines; inline them.
+- **Function helpers over classes.** Shared behaviour goes in plain functions that take what they need (`setupFieldLabel(host, root, control)`). Use a class only when it's needed, e.g. custom elements themselves or a base class like `FormControl`.
 
 ```js
 export function submitImplicitly(control) {

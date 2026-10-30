@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vite-plus/test";
-import { cdp } from "vite-plus/test/browser/context";
+import { accessibleNodesWithRole } from "../core/test-accessibility.js";
 import "./ce-icon.js";
 import { registerIconLibrary } from "./icon-library.js";
 
@@ -24,33 +24,6 @@ function render(html) {
   }
 
   return icon;
-}
-
-/**
- * Images in Chrome's accessibility tree, as "role:name". Vitest's role
- * locators don't see ElementInternals semantics, so this asks the browser
- * through CDP (Chromium only).
- * @returns {Promise<string[]>}
- */
-async function accessibleImages() {
-  const { frameTree } = await cdp().send("Page.getFrameTree");
-
-  // Tests run inside an iframe of the Vitest runner page.
-  const frameId = frameTree.childFrames[0].frame.id;
-  const { nodes } = await cdp().send("Accessibility.getFullAXTree", { frameId });
-
-  /** @type {string[]} */
-  const images = [];
-
-  for (const node of nodes) {
-    if (node.ignored || node.role?.value !== "image") {
-      continue;
-    }
-
-    images.push(`image:${node.name?.value ?? ""}`);
-  }
-
-  return images;
 }
 
 /** @param {Element} icon */
@@ -122,20 +95,20 @@ describe("ce-icon", () => {
     it("is exposed as a single image with the label", async () => {
       render(`<ce-icon name="check" label="Done"></ce-icon>`);
 
-      expect(await accessibleImages()).toEqual(["image:Done"]);
+      expect(await accessibleNodesWithRole("image")).toEqual(["image:Done"]);
     });
 
     it("follows label changes", async () => {
       const icon = render(`<ce-icon name="check" label="Done"></ce-icon>`);
       icon.setAttribute("label", "Complete");
 
-      expect(await accessibleImages()).toEqual(["image:Complete"]);
+      expect(await accessibleNodesWithRole("image")).toEqual(["image:Complete"]);
     });
 
     it("isn't exposed without a label", async () => {
       render(`<ce-icon name="check"></ce-icon>`);
 
-      expect(await accessibleImages()).toEqual([]);
+      expect(await accessibleNodesWithRole("image")).toEqual([]);
     });
   });
 });

@@ -1,11 +1,19 @@
 import "../ce-icon/ce-icon.js";
 import { FormControl } from "../core/form-control.js";
+import {
+  labelMarkup,
+  labelStyles,
+  setupFieldLabel,
+  updateFieldLabel,
+} from "../core/field-label.js";
 import { submitImplicitly } from "../core/implicit-submit.js";
 
 const template = document.createElement("template");
 template.innerHTML = `
   <style>
     :host { display: inline-block; }
+
+    ${labelStyles}
 
     [part="base"] {
       display: flex;
@@ -48,6 +56,7 @@ template.innerHTML = `
 
     [part="clear-button"][hidden] { display: none; }
   </style>
+  ${labelMarkup}
   <div part="base">
     <slot name="start"></slot>
     <input part="input" />
@@ -59,7 +68,7 @@ template.innerHTML = `
 `;
 
 export class CeInput extends FormControl {
-  static observedAttributes = ["value", "placeholder", "with-clear"];
+  static observedAttributes = ["value", "placeholder", "with-clear", "label"];
 
   #initialized = false;
 
@@ -120,6 +129,7 @@ export class CeInput extends FormControl {
     this.#updateValue();
     this.#updatePlaceholder();
     this.#updateDisabled();
+    this.#updateLabel();
   }
 
   /**
@@ -148,6 +158,11 @@ export class CeInput extends FormControl {
 
     if (name === "with-clear") {
       this.#updateClearButton();
+      return;
+    }
+
+    if (name === "label") {
+      this.#updateLabel();
       return;
     }
   }
@@ -191,6 +206,8 @@ export class CeInput extends FormControl {
 
     this.#input = input;
     this.#clearButton = clearButton;
+
+    setupFieldLabel(this, root, input);
   }
 
   #onInput = () => {
@@ -275,6 +292,14 @@ export class CeInput extends FormControl {
     }
 
     this.#input.disabled = this.matches(":disabled");
+  }
+
+  #updateLabel() {
+    if (!this.shadowRoot || !this.#input) {
+      return;
+    }
+
+    updateFieldLabel(this, this.shadowRoot, this.#input);
   }
 
   #updateClearButton() {

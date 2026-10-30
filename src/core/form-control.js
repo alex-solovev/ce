@@ -31,6 +31,14 @@ export class FormControl extends HTMLElement {
     this.setAttribute("name", value);
   }
 
+  get label() {
+    return this.getAttribute("label") ?? "";
+  }
+
+  set label(value) {
+    this.setAttribute("label", value);
+  }
+
   get disabled() {
     return this.hasAttribute("disabled");
   }

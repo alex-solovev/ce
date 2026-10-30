@@ -15,24 +15,23 @@
     <h2>ce-input</h2>
     <form id="demo">
       <p>
-        <label for="first">First name</label>
-        <ce-input id="first" name="first" placeholder="Ada"></ce-input>
+        <ce-input name="first" label="First name" placeholder="Ada"></ce-input>
       </p>
       <p>
-        <label>Last name <ce-input name="last" value="Lovelace"></ce-input></label>
+        <ce-input name="last" label="Last name" value="Lovelace"></ce-input>
       </p>
       <p>
-        <label>Disabled <ce-input name="skipped" value="not submitted" disabled></ce-input></label>
+        <ce-input name="skipped" label="Disabled" value="not submitted" disabled></ce-input>
       </p>
       <p>
-        <label for="search">Search</label>
-        <ce-input id="search" name="search" placeholder="Search…" with-clear>
+        <ce-input name="search" placeholder="Search…" with-clear>
+          <span slot="label">Search <small>(slotted label)</small></span>
           <ce-icon slot="start" name="magnifying-glass"></ce-icon>
         </ce-input>
       </p>
       <fieldset id="group">
         <legend>Fieldset</legend>
-        <label>City <ce-input name="city" value="London"></ce-input></label>
+        <ce-input name="city" label="City" value="London"></ce-input>
       </fieldset>
       <p>
         <label><input type="checkbox" id="toggle-group" /> Disable fieldset</label>
