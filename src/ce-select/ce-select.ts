@@ -206,6 +206,9 @@ export class CeSelect extends FormControl {
 
   #announceTimer: ReturnType<typeof setTimeout> | undefined;
 
+  /** Pending scroll to the highlighted option, see #scheduleScroll. */
+  #scrollFrame = 0;
+
   /**
    * Option elements by value; the first one for duplicate values. Rebuilt
    * whenever the options are read, so lookups never search the DOM.
@@ -329,6 +332,7 @@ export class CeSelect extends FormControl {
   disconnectedCallback(): void {
     this.#observer.disconnect();
     clearTimeout(this.#announceTimer);
+    cancelAnimationFrame(this.#scrollFrame);
     this.#dispatch({ type: "CLOSE" });
   }
 
@@ -899,7 +903,28 @@ export class CeSelect extends FormControl {
       return;
     }
 
-    scrollIntoList(this.#listbox, element);
+    this.#scheduleScroll();
+  }
+
+  /**
+   * Scrolls the highlighted option into view on the next animation frame.
+   * Measuring positions right away would force style and layout in the
+   * middle of handling a key; in the frame the browser does them anyway.
+   * Several highlight changes before the frame scroll once.
+   */
+  #scheduleScroll() {
+    cancelAnimationFrame(this.#scrollFrame);
+
+    this.#scrollFrame = requestAnimationFrame(() => {
+      const value = this.#state.navigation.highlighted;
+      const element = value === null ? null : this.#elements.get(value);
+
+      if (!element || !this.#listbox) {
+        return;
+      }
+
+      scrollIntoList(this.#listbox, element);
+    });
   }
 
   #renderDisabled() {

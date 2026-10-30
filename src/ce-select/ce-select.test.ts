@@ -187,6 +187,15 @@ async function focusAndType(select: CeSelect, keys: string): Promise<void> {
   await userEvent.keyboard(keys);
 }
 
+/** Waits for the select's scroll, which runs on the next animation frame. */
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      resolve();
+    });
+  });
+}
+
 describe("ce-select", () => {
   describe("options and value", () => {
     it("shows the placeholder and submits nothing without a selection", () => {
@@ -776,6 +785,7 @@ describe("ce-select", () => {
       const pageScroll = document.scrollingElement?.scrollTop ?? 0;
 
       await focusAndPress(select, "{End}");
+      await nextFrame();
 
       const last = option(select, "v49").getBoundingClientRect();
       const list = listbox.getBoundingClientRect();
@@ -1107,14 +1117,58 @@ describe("ce-select", () => {
       expect(highlighted(select)).toBe("banana");
     });
 
+    it("doesn't measure layout while handling keys, and scrolls once per frame", async () => {
+      const { select } = render(`<ce-select name="item">${manyOptions(50)}</ce-select>`);
+      const listbox = queryShadow<HTMLElement>(select, "[part='listbox']");
+
+      await focusAndPress(select, "{ArrowDown}");
+      await nextFrame();
+
+      const measure = vi.spyOn(listbox, "getBoundingClientRect");
+
+      // Three highlight moves in one task.
+      for (const key of ["End", "Home", "End"]) {
+        trigger(select).dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+      }
+
+      expect(measure).not.toHaveBeenCalled();
+
+      await nextFrame();
+
+      expect(measure).toHaveBeenCalledTimes(1);
+      expect(listbox.scrollTop).toBeGreaterThan(0);
+
+      measure.mockRestore();
+    });
+
+    it("doesn't scroll after being removed", async () => {
+      const { select } = render(`<ce-select name="item">${manyOptions(50)}</ce-select>`);
+      const listbox = queryShadow<HTMLElement>(select, "[part='listbox']");
+
+      await focusAndPress(select, "{ArrowDown}");
+      await nextFrame();
+
+      const measure = vi.spyOn(listbox, "getBoundingClientRect");
+
+      trigger(select).dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true }));
+      select.remove();
+      await nextFrame();
+
+      expect(measure).not.toHaveBeenCalled();
+
+      measure.mockRestore();
+    });
+
     it("scrolls the list back up to the first option", async () => {
       const { select } = render(`<ce-select name="item">${manyOptions(50)}</ce-select>`);
       const listbox = queryShadow<HTMLElement>(select, "[part='listbox']");
 
       await focusAndPress(select, "{End}");
+      await nextFrame();
       expect(listbox.scrollTop).toBeGreaterThan(0);
 
       await userEvent.keyboard("{Home}");
+      await nextFrame();
 
       const first = option(select, "v0").getBoundingClientRect();
       const list = listbox.getBoundingClientRect();

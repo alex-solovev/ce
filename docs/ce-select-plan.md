@@ -90,7 +90,10 @@ Work stays proportional to what changed, so long lists (thousands of options) co
   - Selection change: only options that were selected or deselected.
   - Every option only when the options themselves change or `multiple` flips (check mark column).
 - Reducer actions are pure JS: highlight moves are one pass over enabled options; only actions that change what's visible re-check the navigation items.
-- Covered by tests that count `setView` calls, not by timing.
+- Options use `content-visibility: auto` (with a remembered intrinsic height), so the browser skips style and layout for options scrolled out of view.
+- Scrolling the highlighted option into view runs on the next animation frame, not while handling the key: measuring positions mid-keystroke forced an extra style and layout pass. Several moves in one frame scroll once.
+- Measured at 20× CPU slowdown, typing 12 keystrokes into 2,000 searchable options: JS 357 → 236 ms, style/layout 1,121 → 757 ms; worst keystroke (showing ~1,100 options again) 318 → 124 ms layout. What's left is mostly the browser's style/layout for options that change visibility.
+- Covered by tests that count `setView` calls and position reads, not by timing.
 
 ## Phases
 

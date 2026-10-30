@@ -11,6 +11,11 @@ template.innerHTML = `
       padding: 0.375em 0.5em;
       cursor: default;
       user-select: none;
+
+      /* Long lists: the browser skips style and layout of options scrolled
+         out of view. auto: once laid out, the real height is remembered. */
+      content-visibility: auto;
+      contain-intrinsic-block-size: auto 2em;
     }
 
     :host(:state(highlighted)) { background: Highlight; color: HighlightText; }
