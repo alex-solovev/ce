@@ -100,10 +100,10 @@ describe("OPTIONS_CHANGED", () => {
     let state = run(withOptions(), { type: "OPEN" }, { type: "HIGHLIGHT", value: "banana" });
     state = run(state, { type: "OPTIONS_CHANGED", options: [option("banana", "Banana")] });
 
-    expect(state.highlighted).toBe("banana");
+    expect(state.navigation.highlighted).toBe("banana");
   });
 
-  it("moves the highlight to the next option when the highlighted one goes away", () => {
+  it("moves the highlight to the first enabled option when the highlighted one goes away", () => {
     let state = run(withOptions(), { type: "OPEN" }, { type: "HIGHLIGHT", value: "banana" });
     state = run(state, {
       type: "OPTIONS_CHANGED",
@@ -114,7 +114,7 @@ describe("OPTIONS_CHANGED", () => {
       ],
     });
 
-    expect(state.highlighted).toBe("date");
+    expect(state.navigation.highlighted).toBe("apple");
   });
 
   it("reports no changes for identical options", () => {
@@ -256,25 +256,29 @@ describe("OPEN and CLOSE", () => {
   it("highlights the selected option", () => {
     const state = run(withOptions(), { type: "SELECT", value: "date" }, { type: "OPEN" });
 
-    expect(state.highlighted).toBe("date");
+    expect(state.navigation.highlighted).toBe("date");
   });
 
   it("highlights the first enabled option without a selection", () => {
     const state = withOptions({}, [option("a", "A", { disabled: true }), option("b", "B")]);
 
-    expect(run(state, { type: "OPEN" }).highlighted).toBe("b");
+    expect(run(state, { type: "OPEN" }).navigation.highlighted).toBe("b");
   });
 
   it("highlights the first or last enabled option on request", () => {
-    expect(run(withOptions(), { type: "OPEN", highlight: "first" }).highlighted).toBe("apple");
-    expect(run(withOptions(), { type: "OPEN", highlight: "last" }).highlighted).toBe("date");
+    expect(run(withOptions(), { type: "OPEN", highlight: "first" }).navigation.highlighted).toBe(
+      "apple",
+    );
+    expect(run(withOptions(), { type: "OPEN", highlight: "last" }).navigation.highlighted).toBe(
+      "date",
+    );
   });
 
   it("opens with nothing highlighted when there are no enabled options", () => {
     const state = run(createState(), { type: "OPEN" });
 
     expect(state.open).toBe(true);
-    expect(state.highlighted).toBe(null);
+    expect(state.navigation.highlighted).toBe(null);
   });
 
   it("is ignored while disabled", () => {
@@ -291,7 +295,7 @@ describe("OPEN and CLOSE", () => {
       { type: "CLOSE" },
     );
 
-    expect(state.highlighted).toBe(null);
+    expect(state.navigation.highlighted).toBe(null);
     expect(state.query).toBe(null);
     expectNoChange(closed, { type: "CLOSE" });
   });
@@ -306,7 +310,7 @@ describe("HIGHLIGHT", () => {
     );
 
     expect(state.open).toBe(true);
-    expect(state.highlighted).toBe("banana");
+    expect(state.navigation.highlighted).toBe("banana");
   });
 
   it("opens at the first or last option for Home / End", () => {
@@ -316,23 +320,23 @@ describe("HIGHLIGHT", () => {
       { type: "HIGHLIGHT", to: "last" },
     );
 
-    expect(state.highlighted).toBe("date");
+    expect(state.navigation.highlighted).toBe("date");
   });
 
   it("moves next / prev, skipping disabled options and wrapping", () => {
     let state = run(withOptions(), { type: "OPEN" });
 
     state = run(state, { type: "HIGHLIGHT", to: "next" });
-    expect(state.highlighted).toBe("banana");
+    expect(state.navigation.highlighted).toBe("banana");
 
     state = run(state, { type: "HIGHLIGHT", to: "next" });
-    expect(state.highlighted).toBe("date");
+    expect(state.navigation.highlighted).toBe("date");
 
     state = run(state, { type: "HIGHLIGHT", to: "next" });
-    expect(state.highlighted).toBe("apple");
+    expect(state.navigation.highlighted).toBe("apple");
 
     state = run(state, { type: "HIGHLIGHT", to: "prev" });
-    expect(state.highlighted).toBe("date");
+    expect(state.navigation.highlighted).toBe("date");
   });
 
   it("moves by pages and clamps", () => {
@@ -345,23 +349,23 @@ describe("HIGHLIGHT", () => {
     let state = run(withOptions({}, many), { type: "OPEN" });
 
     state = run(state, { type: "HIGHLIGHT", to: "pageNext" });
-    expect(state.highlighted).toBe("v10");
+    expect(state.navigation.highlighted).toBe("v10");
 
     state = run(
       state,
       { type: "HIGHLIGHT", to: "pageNext" },
       { type: "HIGHLIGHT", to: "pageNext" },
     );
-    expect(state.highlighted).toBe("v24");
+    expect(state.navigation.highlighted).toBe("v24");
 
     state = run(state, { type: "HIGHLIGHT", to: "pagePrev" });
-    expect(state.highlighted).toBe("v14");
+    expect(state.navigation.highlighted).toBe("v14");
   });
 
   it("highlights a value on hover only if it's enabled and visible", () => {
     const state = run(withOptions(), { type: "OPEN" });
 
-    expect(run(state, { type: "HIGHLIGHT", value: "date" }).highlighted).toBe("date");
+    expect(run(state, { type: "HIGHLIGHT", value: "date" }).navigation.highlighted).toBe("date");
     expectNoChange(state, { type: "HIGHLIGHT", value: "cherry" });
     expect(run(withOptions(), { type: "HIGHLIGHT", value: "date" }).open).toBe(false);
   });
@@ -379,37 +383,37 @@ describe("TYPEAHEAD", () => {
     const state = run(withOptions({}, names), { type: "TYPEAHEAD", text: "a" });
 
     expect(state.open).toBe(true);
-    expect(state.highlighted).toBe("anna");
+    expect(state.navigation.highlighted).toBe("anna");
   });
 
   it("cycles through matches when the same key repeats", () => {
     let state = run(withOptions({}, names), { type: "TYPEAHEAD", text: "a" });
 
     state = run(state, { type: "TYPEAHEAD", text: "aa" });
-    expect(state.highlighted).toBe("adam");
+    expect(state.navigation.highlighted).toBe("adam");
 
     state = run(state, { type: "TYPEAHEAD", text: "aaa" });
-    expect(state.highlighted).toBe("alice");
+    expect(state.navigation.highlighted).toBe("alice");
 
     state = run(state, { type: "TYPEAHEAD", text: "aaaa" });
-    expect(state.highlighted).toBe("anna");
+    expect(state.navigation.highlighted).toBe("anna");
   });
 
   it("matches longer prefixes, keeping the current option while it matches", () => {
     let state = run(withOptions({}, names), { type: "TYPEAHEAD", text: "a" });
 
     state = run(state, { type: "TYPEAHEAD", text: "an" });
-    expect(state.highlighted).toBe("anna");
+    expect(state.navigation.highlighted).toBe("anna");
 
     state = run(state, { type: "TYPEAHEAD", text: "al" });
-    expect(state.highlighted).toBe("alice");
+    expect(state.navigation.highlighted).toBe("alice");
   });
 
   it("keeps the highlight when nothing matches, and is ignored when searchable", () => {
     const opened = run(withOptions({}, names), { type: "OPEN" });
     const searchable = withOptions({ searchable: true }, names);
 
-    expect(run(opened, { type: "TYPEAHEAD", text: "z" }).highlighted).toBe("bob");
+    expect(run(opened, { type: "TYPEAHEAD", text: "z" }).navigation.highlighted).toBe("bob");
     expectNoChange(searchable, { type: "TYPEAHEAD", text: "a" });
   });
 });
@@ -420,7 +424,7 @@ describe("QUERY", () => {
 
     expect(state.open).toBe(true);
     expect(visibleOptions(state)).toEqual([option("banana", "Banana")]);
-    expect(state.highlighted).toBe("banana");
+    expect(state.navigation.highlighted).toBe("banana");
   });
 
   it("shows all options when filtering is off", () => {
@@ -435,7 +439,7 @@ describe("QUERY", () => {
   it("highlights nothing when nothing matches", () => {
     const state = run(withOptions({ searchable: true }), { type: "QUERY", text: "zzz" });
 
-    expect(state.highlighted).toBe(null);
+    expect(state.navigation.highlighted).toBe(null);
   });
 
   it("is ignored when not searchable", () => {
@@ -502,7 +506,7 @@ describe("CONFIG", () => {
 
     expect(state.query).toBe(null);
     expect(visibleOptions(state)).toEqual(fruits);
-    expect(state.highlighted).toBe("banana");
+    expect(state.navigation.highlighted).toBe("banana");
   });
 });
 
@@ -528,7 +532,7 @@ describe("reduce", () => {
     const changes = reduce(state, { type: "SELECT", value: "banana" });
 
     expect(state.selection).toEqual([{ value: "banana", label: "Banana" }]);
-    expect([...changes].sort()).toEqual(["dirty", "highlighted", "open", "selection"]);
+    expect([...changes].sort()).toEqual(["dirty", "navigation", "open", "selection"]);
   });
 
   it("throws on unknown actions", () => {

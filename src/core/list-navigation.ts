@@ -54,42 +54,21 @@ export function createListNavigation(options: ListNavigationOptions = {}): ListN
 
 /**
  * Replaces the items. The highlight is kept if it's still enabled; otherwise
- * it moves to the nearest enabled item after its old position, then before
- * it, or null.
+ * it moves to the first enabled item, or null if there's none. Nothing
+ * highlighted stays that way.
  */
 export function setItems(nav: ListNavigation, items: NavigationItem[]): boolean {
-  const oldItems = nav.items;
-  const oldHighlighted = nav.highlighted;
-  const itemsChanged = !sameItems(oldItems, items);
+  const itemsChanged = !sameItems(nav.items, items);
 
   nav.items = items;
 
-  if (oldHighlighted === null || findEnabled(nav, oldHighlighted)) {
+  if (nav.highlighted === null || findEnabled(nav, nav.highlighted)) {
     return itemsChanged;
   }
 
-  const oldIndex = oldItems.findIndex((item) => item.value === oldHighlighted);
+  const first = nav.items.find((item) => !item.disabled);
 
-  // Later items first, then earlier ones, closest first.
-  for (let i = oldIndex + 1; i < oldItems.length; i++) {
-    const item = oldItems[i];
-
-    if (item && findEnabled(nav, item.value)) {
-      nav.highlighted = item.value;
-      return true;
-    }
-  }
-
-  for (let i = oldIndex - 1; i >= 0; i--) {
-    const item = oldItems[i];
-
-    if (item && findEnabled(nav, item.value)) {
-      nav.highlighted = item.value;
-      return true;
-    }
-  }
-
-  nav.highlighted = null;
+  nav.highlighted = first?.value ?? null;
 
   return true;
 }

@@ -18,15 +18,15 @@ One element covers select, searchable select and multi-select. WAI-ARIA treats t
 
 ### State
 
-| Field         | Notes                                                                                                                                          |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `options`     | Snapshot `{ value, label, disabled, defaultSelected }[]` in DOM order. Duplicate values: first wins.                                           |
-| `selection`   | `{ value, label }[]` in selection order. `label` is `null` until a matching option is seen. See below.                                         |
-| `dirty`       | `false` until the user or code sets the value. While clean, the selection follows options marked `selected` (like native `<option selected>`). |
-| `open`        | Popup open.                                                                                                                                    |
-| `highlighted` | Value of the highlighted option, or `null`.                                                                                                    |
-| `query`       | `null` while not typing (input shows the selection), otherwise the search text. Searchable only.                                               |
-| `config`      | `{ multiple, searchable, filter, disabled }` mirrored from attributes and the effective disabled state.                                        |
+| Field        | Notes                                                                                                                                                                           |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `options`    | Snapshot `{ value, label, disabled, defaultSelected }[]` in DOM order. Duplicate values: first wins.                                                                            |
+| `selection`  | `{ value, label }[]` in selection order. `label` is `null` until a matching option is seen. See below.                                                                          |
+| `dirty`      | `false` until the user or code sets the value. While clean, the selection follows options marked `selected` (like native `<option selected>`).                                  |
+| `open`       | Popup open.                                                                                                                                                                     |
+| `navigation` | `ListNavigation` from `src/core/list-navigation.ts`: the highlight and keyboard movement. Its items are always the visible options; only the list-navigation helpers change it. |
+| `query`      | `null` while not typing (input shows the selection), otherwise the search text. Searchable only.                                                                                |
+| `config`     | `{ multiple, searchable, filter, disabled }` mirrored from attributes and the effective disabled state.                                                                         |
 
 Derived, not stored: visible options (`query` filter unless `filter` is off), display text, form value.
 
@@ -49,14 +49,14 @@ Plain objects `{ type, ...payload }`. The component decides which ones are user 
 
 | Action               | Payload                                                                            | Effect                                                                                                                                                                       |
 | -------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `OPTIONS_CHANGED`    | `options`                                                                          | Replace snapshot. Fill/refresh labels of selected values. Clean: selection = `defaultSelected` options. Fix `highlighted`.                                                   |
+| `OPTIONS_CHANGED`    | `options`                                                                          | Replace snapshot. Fill/refresh labels of selected values. Clean: selection = `defaultSelected` options. Sync navigation items.                                               |
 | `SET_VALUE`          | `values: string[]`                                                                 | Programmatic. `dirty = true`. Labels from options, else `null`. Single: first value only.                                                                                    |
 | `SELECT`             | `value`                                                                            | User, single. Ignored if disabled or option missing/disabled. Replace selection, close.                                                                                      |
 | `TOGGLE`             | `value`                                                                            | User, multiple. Same guards. Add or remove; stays open.                                                                                                                      |
-| `SELECT_HIGHLIGHTED` |                                                                                    | Enter / Space / Tab. `SELECT` or `TOGGLE` on `highlighted`; no-op if none.                                                                                                   |
+| `SELECT_HIGHLIGHTED` |                                                                                    | Enter / Space / Tab. `SELECT` or `TOGGLE` on the highlighted option; no-op if none.                                                                                          |
 | `CLEAR`              |                                                                                    | User. Empty selection, `query` → `null`.                                                                                                                                     |
 | `OPEN`               | `highlight?: "first" \| "last"`                                                    | Ignored if disabled. Highlight: given end, else first selected visible option, else first enabled visible option.                                                            |
-| `CLOSE`              |                                                                                    | `open = false`, `highlighted = null`, `query = null`.                                                                                                                        |
+| `CLOSE`              |                                                                                    | `open = false`, highlight cleared, `query = null`.                                                                                                                           |
 | `HIGHLIGHT`          | `to: "next" \| "prev" \| "first" \| "last" \| "pageNext" \| "pagePrev"` or `value` | Move among visible enabled options. `next` / `prev` wrap; page moves 10 and clamps. Opens if closed (keyboard).                                                              |
 | `TYPEAHEAD`          | `text`                                                                             | Plain mode. Component buffers keys (500 ms) and passes the buffer. Highlight next label starting with it, after the current one; repeated same char cycles. Opens if closed. |
 | `QUERY`              | `text`                                                                             | Searchable. Set `query`, open, highlight first visible enabled match (or `null`).                                                                                            |
@@ -72,8 +72,9 @@ Checked by `checkInvariants(state)` after every action in tests.
 - Single mode: `selection.length ≤ 1`.
 - `selection` has no duplicate values.
 - `OPTIONS_CHANGED` never removes from a dirty `selection`; it only fills in `label: null` entries and refreshes labels of matching options.
-- `highlighted` is `null` or the value of a visible, enabled option.
-- Closed ⇒ `highlighted === null` and `query === null`.
+- `navigation.items` equals the visible options.
+- `navigation.highlighted` is `null` or the value of a visible, enabled option.
+- Closed ⇒ nothing highlighted and `query === null`.
 - `config.disabled` ⇒ closed; user actions (`SELECT`, `TOGGLE`, `SELECT_HIGHLIGHTED`, `CLEAR`, `OPEN`, `HIGHLIGHT`, `TYPEAHEAD`, `QUERY`) change nothing.
 - Not searchable ⇒ `query === null`.
 - Disabled options can't be selected by the user, but can be selected programmatically (like native).
@@ -168,7 +169,7 @@ Each phase ends with tests passing and a demo update, ready for review.
 - Value set in code that never gets a matching option → kept, submitted, display shows the raw value.
 - Option label changes while selected → stored label updates.
 - Selected option disabled later → stays selected (like native).
-- Highlighted option removed or disabled → highlight moves to the next enabled option, or `null`.
+- Highlighted option removed or disabled → highlight moves to the first enabled option, or `null`.
 - Option label text changes → display text updates.
 - Duplicate values: first option wins; later duplicates are unselectable. Document it.
 - All options disabled, or no options: popup opens with nothing highlighted; Enter does nothing.

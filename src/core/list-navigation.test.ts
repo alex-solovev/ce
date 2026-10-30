@@ -164,24 +164,34 @@ describe("setItems", () => {
     expect(nav.highlighted).toBe("banana");
   });
 
-  it("moves a removed or disabled highlight to the next enabled item", () => {
-    const nav = withItems();
-    highlightValue(nav, "banana");
-
-    expect(
-      setItems(nav, [item("apple", "Apple"), item("banana", "Banana", true), item("date", "Date")]),
-    ).toBe(true);
-    expect(nav.highlighted).toBe("date");
-  });
-
-  it("falls back to the previous enabled item, then null", () => {
+  it("moves a removed or disabled highlight to the first enabled item", () => {
     const nav = withItems();
     highlightValue(nav, "date");
 
-    setItems(nav, [item("apple", "Apple"), item("banana", "Banana")]);
+    expect(
+      setItems(nav, [
+        item("apple", "Apple", true),
+        item("banana", "Banana"),
+        item("date", "Date", true),
+      ]),
+    ).toBe(true);
     expect(nav.highlighted).toBe("banana");
+  });
 
-    setItems(nav, []);
+  it("highlights nothing when no enabled item is left", () => {
+    const nav = withItems();
+    highlightValue(nav, "date");
+
+    setItems(nav, [item("apple", "Apple", true)]);
+
+    expect(nav.highlighted).toBe(null);
+  });
+
+  it("keeps nothing highlighted", () => {
+    const nav = withItems();
+
+    setItems(nav, [item("date", "Date")]);
+
     expect(nav.highlighted).toBe(null);
   });
 });

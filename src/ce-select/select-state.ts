@@ -4,6 +4,16 @@
 // The reducer changes the state in place for performance. It's the only code
 // allowed to change it; everything else only reads.
 
+import {
+  clearHighlight,
+  createListNavigation,
+  highlightValue,
+  moveHighlight,
+  setItems,
+  typeahead as matchTypeahead,
+} from "../core/list-navigation.ts";
+import type { HighlightTarget, ListNavigation } from "../core/list-navigation.ts";
+
 export type Option = {
   value: string;
   label: string;
@@ -32,13 +42,12 @@ export type State = {
   selection: Selected[];
   dirty: boolean;
   open: boolean;
-  highlighted: string | null;
+  /** Highlight and keyboard movement. Its items are always the visible options. */
+  navigation: ListNavigation;
   /** Null while not typing; the input shows the selection. */
   query: string | null;
   config: Config;
 };
-
-export type HighlightTarget = "next" | "prev" | "first" | "last" | "pageNext" | "pagePrev";
 
 /** Actions without a payload. */
 export type PlainAction = {
@@ -113,15 +122,13 @@ type WithValue = {
   value: string;
 };
 
-const PAGE_SIZE = 10;
-
 export function createState(config: Partial<Config> = {}): State {
   return {
     options: [],
     selection: [],
     dirty: false,
     open: false,
-    highlighted: null,
+    navigation: createListNavigation(),
     query: null,
     config: {
       multiple: false,
@@ -204,12 +211,23 @@ function set<K extends Field>(state: State, changes: Changes, field: K, value: S
   changes.add(field);
 }
 
+/** Records a change reported by a list-navigation helper. */
+function track(changes: Changes, changed: boolean): void {
+  if (!changed) {
+    return;
+  }
+
+  changes.add("navigation");
+}
+
+/** Keeps the navigation items equal to the visible options. */
+function syncNavigation(state: State, changes: Changes): void {
+  track(changes, setItems(state.navigation, visibleOptions(state)));
+}
+
 // Actions
 
 function optionsChanged(state: State, changes: Changes, options: Option[]): void {
-  // Needed to move the highlight past a removed option.
-  const oldCandidates = enabledVisibleOptions(state);
-
   // First option per value wins.
   const unique: Option[] = [];
   const seen = new Set<string>();
@@ -228,7 +246,7 @@ function optionsChanged(state: State, changes: Changes, options: Option[]): void
   // While clean, the selection follows options marked `selected`.
   if (!state.dirty) {
     set(state, changes, "selection", defaultSelection(state.options, state.config.multiple));
-    set(state, changes, "highlighted", highlightAfterOptionsChange(state, oldCandidates));
+    syncNavigation(state, changes);
     return;
   }
 
@@ -248,7 +266,7 @@ function optionsChanged(state: State, changes: Changes, options: Option[]): void
   }
 
   set(state, changes, "selection", selection);
-  set(state, changes, "highlighted", highlightAfterOptionsChange(state, oldCandidates));
+  syncNavigation(state, changes);
 }
 
 /** Programmatic value (`value` setter, form state restore). */
@@ -330,16 +348,18 @@ function toggle(state: State, changes: Changes, value: string): void {
 
 /** Enter / Space / Tab on the highlighted option. */
 function selectHighlighted(state: State, changes: Changes): void {
-  if (state.highlighted === null) {
+  const highlighted = state.navigation.highlighted;
+
+  if (highlighted === null) {
     return;
   }
 
   if (state.config.multiple) {
-    toggle(state, changes, state.highlighted);
+    toggle(state, changes, highlighted);
     return;
   }
 
-  select(state, changes, state.highlighted);
+  select(state, changes, highlighted);
 }
 
 function clear(state: State, changes: Changes): void {
@@ -350,9 +370,13 @@ function clear(state: State, changes: Changes): void {
   set(state, changes, "selection", []);
   set(state, changes, "dirty", true);
   set(state, changes, "query", null);
+  syncNavigation(state, changes);
 }
 
-/** @param at Highlight this end instead of the selection. */
+/**
+ * Highlights the given end, else the first selected option that can be
+ * highlighted, else the first enabled one.
+ */
 function open(state: State, changes: Changes, at?: "first" | "last"): void {
   if (state.config.disabled || state.open) {
     return;
@@ -360,31 +384,29 @@ function open(state: State, changes: Changes, at?: "first" | "last"): void {
 
   set(state, changes, "open", true);
   set(state, changes, "query", null);
+  syncNavigation(state, changes);
+
+  if (at) {
+    track(changes, moveHighlight(state.navigation, at));
+    return;
+  }
 
   const candidates = enabledVisibleOptions(state);
+  const selected = state.selection.find((item) => findOption(candidates, item.value));
 
-  if (candidates.length === 0) {
-    set(state, changes, "highlighted", null);
+  if (selected) {
+    track(changes, highlightValue(state.navigation, selected.value));
     return;
   }
 
-  if (at === "first") {
-    set(state, changes, "highlighted", candidates[0]?.value ?? null);
-    return;
-  }
-
-  if (at === "last") {
-    set(state, changes, "highlighted", candidates[candidates.length - 1]?.value ?? null);
-    return;
-  }
-
-  set(state, changes, "highlighted", defaultHighlight(state));
+  track(changes, moveHighlight(state.navigation, "first"));
 }
 
 function close(state: State, changes: Changes): void {
   set(state, changes, "open", false);
-  set(state, changes, "highlighted", null);
   set(state, changes, "query", null);
+  syncNavigation(state, changes);
+  track(changes, clearHighlight(state.navigation));
 }
 
 /**
@@ -410,25 +432,12 @@ function highlight(state: State, changes: Changes, action: HighlightAction): voi
     return;
   }
 
-  const candidates = enabledVisibleOptions(state);
-
   if (action.value !== undefined) {
-    if (!findOption(candidates, action.value)) {
-      return;
-    }
-
-    set(state, changes, "highlighted", action.value);
+    track(changes, highlightValue(state.navigation, action.value));
     return;
   }
 
-  if (candidates.length === 0) {
-    return;
-  }
-
-  const index = candidates.findIndex((option) => option.value === state.highlighted);
-  const nextIndex = moveIndex(index, candidates.length, action.to);
-
-  set(state, changes, "highlighted", candidates[nextIndex]?.value ?? null);
+  track(changes, moveHighlight(state.navigation, action.to));
 }
 
 /** Plain mode only. `text` is the component's buffered keystrokes. */
@@ -438,26 +447,7 @@ function typeahead(state: State, changes: Changes, text: string): void {
   }
 
   open(state, changes);
-
-  const candidates = enabledVisibleOptions(state);
-  const current = candidates.findIndex((option) => option.value === state.highlighted);
-
-  // "aaa" cycles through options starting with "a", one per key press.
-  // Otherwise keep the current option while it still matches.
-  const repeated = text === text.charAt(0).repeat(text.length);
-  const search = repeated ? text.charAt(0).toLowerCase() : text.toLowerCase();
-  const start = repeated ? current + 1 : Math.max(current, 0);
-
-  for (let step = 0; step < candidates.length; step++) {
-    const option = candidates[(start + step) % candidates.length];
-
-    if (!option || !option.label.toLowerCase().startsWith(search)) {
-      continue;
-    }
-
-    set(state, changes, "highlighted", option.value);
-    return;
-  }
+  track(changes, matchTypeahead(state.navigation, text));
 }
 
 /** Searchable only: the user typed in the input. */
@@ -468,10 +458,8 @@ function query(state: State, changes: Changes, text: string): void {
 
   set(state, changes, "open", true);
   set(state, changes, "query", text);
-
-  const candidates = enabledVisibleOptions(state);
-
-  set(state, changes, "highlighted", candidates[0]?.value ?? null);
+  syncNavigation(state, changes);
+  track(changes, moveHighlight(state.navigation, "first"));
 }
 
 /** Focus left the component. */
@@ -505,22 +493,13 @@ function configChanged(state: State, changes: Changes, config: Partial<Config>):
     set(state, changes, "query", null);
   }
 
+  // A changed filter changes the visible options; an invalid highlight
+  // moves to the first enabled one.
+  syncNavigation(state, changes);
+
   if (state.config.disabled) {
     close(state, changes);
-    return;
   }
-
-  if (!state.open) {
-    return;
-  }
-
-  const candidates = enabledVisibleOptions(state);
-
-  if (findOption(candidates, state.highlighted)) {
-    return;
-  }
-
-  set(state, changes, "highlighted", defaultHighlight(state));
 }
 
 /** Form reset: back to options marked `selected`, or empty. */
@@ -528,39 +507,6 @@ function reset(state: State, changes: Changes): void {
   set(state, changes, "selection", defaultSelection(state.options, state.config.multiple));
   set(state, changes, "dirty", false);
   close(state, changes);
-}
-
-/**
- * Keeps the highlight if it's still valid, else moves to the next option
- * after its old position, else the default.
- * @param state Already has the new options.
- * @param oldCandidates Enabled visible options before the change.
- */
-function highlightAfterOptionsChange(state: State, oldCandidates: Option[]): string | null {
-  if (!state.open) {
-    return null;
-  }
-
-  const candidates = enabledVisibleOptions(state);
-
-  if (findOption(candidates, state.highlighted)) {
-    return state.highlighted;
-  }
-
-  const oldIndex = oldCandidates.findIndex((option) => option.value === state.highlighted);
-
-  if (oldIndex === -1) {
-    return defaultHighlight(state);
-  }
-
-  const later = oldCandidates.slice(oldIndex + 1);
-  const next = later.find((candidate) => findOption(candidates, candidate.value));
-
-  if (next) {
-    return next.value;
-  }
-
-  return defaultHighlight(state);
 }
 
 // Selectors
@@ -631,13 +577,18 @@ export function checkInvariants(state: State): void {
     throw new Error("Options have duplicate values");
   }
 
-  const candidates = enabledVisibleOptions(state);
-
-  if (state.highlighted !== null && !findOption(candidates, state.highlighted)) {
-    throw new Error(`Highlighted "${state.highlighted}" isn't a visible, enabled option`);
+  if (!isEqual(state.navigation.items, visibleOptions(state))) {
+    throw new Error("Navigation items aren't the visible options");
   }
 
-  if (!state.open && (state.highlighted !== null || state.query !== null)) {
+  const highlighted = state.navigation.highlighted;
+  const candidates = enabledVisibleOptions(state);
+
+  if (highlighted !== null && !findOption(candidates, highlighted)) {
+    throw new Error(`Highlighted "${highlighted}" isn't a visible, enabled option`);
+  }
+
+  if (!state.open && (highlighted !== null || state.query !== null)) {
     throw new Error("Closed with a highlight or query");
   }
 
@@ -674,19 +625,6 @@ function defaultSelection(options: Option[], multiple: boolean): Selected[] {
   return selection;
 }
 
-/** First selected option that can be highlighted, else the first enabled one. */
-function defaultHighlight(state: State): string | null {
-  const candidates = enabledVisibleOptions(state);
-
-  const selected = state.selection.find((item) => findOption(candidates, item.value));
-
-  if (selected) {
-    return selected.value;
-  }
-
-  return candidates[0]?.value ?? null;
-}
-
 function enabledVisibleOptions(state: State): Option[] {
   const result: Option[] = [];
 
@@ -699,28 +637,6 @@ function enabledVisibleOptions(state: State): Option[] {
   }
 
   return result;
-}
-
-/** @param index Current index, -1 if none. */
-function moveIndex(index: number, length: number, to: HighlightTarget | undefined): number {
-  const last = length - 1;
-
-  switch (to) {
-    case "first":
-      return 0;
-    case "last":
-      return last;
-    case "next":
-      return index >= last ? 0 : index + 1;
-    case "prev":
-      return index <= 0 ? last : index - 1;
-    case "pageNext":
-      return Math.min(Math.max(index, 0) + PAGE_SIZE, last);
-    case "pagePrev":
-      return Math.max(index - PAGE_SIZE, 0);
-    default:
-      throw new Error(`Unknown highlight target: ${to}`);
-  }
 }
 
 function findOption(options: Option[], value: string | null): Option | null {
