@@ -57,7 +57,12 @@ export function updateFieldLabel(host: HTMLElement, root: ShadowRoot, control: H
   control.ariaLabelledByElements = [label];
 }
 
-function findLabel(root: ShadowRoot): { label: HTMLLabelElement; slot: HTMLSlotElement } {
+type LabelElements = {
+  label: HTMLLabelElement;
+  slot: HTMLSlotElement;
+};
+
+function findLabel(root: ShadowRoot): LabelElements {
   const label = root.querySelector("label[part='label']");
   const slot = label?.querySelector("slot[name='label']");
 

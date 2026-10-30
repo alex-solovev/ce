@@ -53,9 +53,13 @@ it("collects a removed ce-input with its label listeners", async () => {
   expect(refs.slot.deref()).toBe(undefined);
 });
 
+type Cleanup = {
+  remove?: () => void;
+};
+
 it("control: a document listener holding the host keeps it alive", async () => {
   // Only the listener may hold the host, so keep just a way to remove it.
-  const cleanup: { remove?: () => void } = {};
+  const cleanup: Cleanup = {};
 
   const refs = renderAndRemove((host) => {
     const listener = () => {

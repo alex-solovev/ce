@@ -11,21 +11,24 @@ One element covers select, searchable select and multi-select. WAI-ARIA treats t
 
 ## Architecture
 
-- **Reducer** (`src/ce-select/select-state.js`): pure `reduce(state, action) → state`. No DOM. Enforces invariants, so the component can't reach broken states.
-- **Component** (`src/ce-select/ce-select.js`): `#dispatch(action)` runs the reducer, then `#render(prev, next)` updates only what changed (trigger text, option states, popover, form value, ARIA), then fires events.
+- **Reducer** (`src/ce-select/select-state.ts`): `reduce(state, action) → changes`. Changes the state in place (for performance) and returns the set of changed fields. It's the only code allowed to write the state. No DOM. Enforces invariants, so the component can't reach broken states.
+- **Component** (`src/ce-select/ce-select.ts`): `#dispatch(action)` runs the reducer, then `#render(changes)` updates only what changed (trigger text, option states, popover, form value, ARIA), then fires events.
 - **Events** only fire for user actions that change the value (`input` + `change`), never for programmatic `value` / `options` changes, matching native `<select>`.
 - **Options are the light DOM.** `ce-option` children are the single source. The `options` setter generates `ce-option` children, and a `MutationObserver` turns any DOM change into one `OPTIONS_CHANGED` action.
 
 ### State
 
-| Field                                | Notes                                                                        |
-| ------------------------------------ | ---------------------------------------------------------------------------- |
-| `options`                            | Snapshot `{ value, label, disabled }[]` in DOM order.                        |
-| `selection`                          | `{ value, label }[]` in selection order. Single mode: length ≤ 1. See below. |
-| `open`                               | Popup open.                                                                  |
-| `highlighted`                        | Value of the highlighted option, or `null`.                                  |
-| `query`                              | Search text (searchable only).                                               |
-| `multiple`, `searchable`, `disabled` | Mirrors attributes / effective disabled state.                               |
+| Field         | Notes                                                                                                                                          |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `options`     | Snapshot `{ value, label, disabled, defaultSelected }[]` in DOM order. Duplicate values: first wins.                                           |
+| `selection`   | `{ value, label }[]` in selection order. `label` is `null` until a matching option is seen. See below.                                         |
+| `dirty`       | `false` until the user or code sets the value. While clean, the selection follows options marked `selected` (like native `<option selected>`). |
+| `open`        | Popup open.                                                                                                                                    |
+| `highlighted` | Value of the highlighted option, or `null`.                                                                                                    |
+| `query`       | `null` while not typing (input shows the selection), otherwise the search text. Searchable only.                                               |
+| `config`      | `{ multiple, searchable, filter, disabled }` mirrored from attributes and the effective disabled state.                                        |
+
+Derived, not stored: visible options (`query` filter unless `filter` is off), display text, form value.
 
 ### Selection is independent of options
 
@@ -42,17 +45,39 @@ Web Awesome's `wa-select` does the opposite: it keeps unmatched values internall
 
 ### Actions
 
-`OPTIONS_CHANGED`, `SET_VALUE` (programmatic), `SELECT` (user, single), `TOGGLE` (user, multiple), `CLEAR`, `OPEN`, `CLOSE`, `HIGHLIGHT` (`next` / `prev` / `first` / `last` / value), `TYPEAHEAD` (char), `QUERY` (text), `CONFIG` (`multiple` / `searchable`), `DISABLED`, `RESET` (to default-selected), `RESTORE` (form state).
+Plain objects `{ type, ...payload }`. The component decides which ones are user actions (and fire `input` / `change`); the reducer doesn't know about events.
 
-### Invariants (checked after every action, covered by reducer tests)
+| Action               | Payload                                                                            | Effect                                                                                                                                                                       |
+| -------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OPTIONS_CHANGED`    | `options`                                                                          | Replace snapshot. Fill/refresh labels of selected values. Clean: selection = `defaultSelected` options. Fix `highlighted`.                                                   |
+| `SET_VALUE`          | `values: string[]`                                                                 | Programmatic. `dirty = true`. Labels from options, else `null`. Single: first value only.                                                                                    |
+| `SELECT`             | `value`                                                                            | User, single. Ignored if disabled or option missing/disabled. Replace selection, close.                                                                                      |
+| `TOGGLE`             | `value`                                                                            | User, multiple. Same guards. Add or remove; stays open.                                                                                                                      |
+| `SELECT_HIGHLIGHTED` |                                                                                    | Enter / Space / Tab. `SELECT` or `TOGGLE` on `highlighted`; no-op if none.                                                                                                   |
+| `CLEAR`              |                                                                                    | User. Empty selection, `query` → `null`.                                                                                                                                     |
+| `OPEN`               | `highlight?: "first" \| "last"`                                                    | Ignored if disabled. Highlight: given end, else first selected visible option, else first enabled visible option.                                                            |
+| `CLOSE`              |                                                                                    | `open = false`, `highlighted = null`, `query = null`.                                                                                                                        |
+| `HIGHLIGHT`          | `to: "next" \| "prev" \| "first" \| "last" \| "pageNext" \| "pagePrev"` or `value` | Move among visible enabled options. `next` / `prev` wrap; page moves 10 and clamps. Opens if closed (keyboard).                                                              |
+| `TYPEAHEAD`          | `text`                                                                             | Plain mode. Component buffers keys (500 ms) and passes the buffer. Highlight next label starting with it, after the current one; repeated same char cycles. Opens if closed. |
+| `QUERY`              | `text`                                                                             | Searchable. Set `query`, open, highlight first visible enabled match (or `null`).                                                                                            |
+| `BLUR`               |                                                                                    | Close. Searchable single: `query === ""` clears the selection; other text reverts (`query = null`).                                                                          |
+| `CONFIG`             | partial `config`                                                                   | `multiple` off → keep first selected. Disabled on → close. `searchable` / `filter` change → `query = null`, fix highlight.                                                   |
+| `RESET`              |                                                                                    | `dirty = false`, selection = `defaultSelected` options (empty → placeholder). Close.                                                                                         |
+| `RESTORE`            | `values: string[]`                                                                 | Like `SET_VALUE` (form state restore / autocomplete).                                                                                                                        |
 
-- Single mode: `value.length ≤ 1`.
+### Invariants
+
+Checked by `checkInvariants(state)` after every action in tests.
+
+- Single mode: `selection.length ≤ 1`.
 - `selection` has no duplicate values.
-- `OPTIONS_CHANGED` never removes from `selection`; it only fills in `label: null` entries and refreshes labels of matching options.
-- `highlighted` is `null` or a visible, enabled option.
-- `disabled` ⇒ `open === false`. User actions are ignored while disabled.
-- Closed ⇒ `query === ""` and `highlighted === null`.
+- `OPTIONS_CHANGED` never removes from a dirty `selection`; it only fills in `label: null` entries and refreshes labels of matching options.
+- `highlighted` is `null` or the value of a visible, enabled option.
+- Closed ⇒ `highlighted === null` and `query === null`.
+- `config.disabled` ⇒ closed; user actions (`SELECT`, `TOGGLE`, `SELECT_HIGHLIGHTED`, `CLEAR`, `OPEN`, `HIGHLIGHT`, `TYPEAHEAD`, `QUERY`) change nothing.
+- Not searchable ⇒ `query === null`.
 - Disabled options can't be selected by the user, but can be selected programmatically (like native).
+- A no-op action returns an empty change set and leaves the state untouched (so the component can skip rendering).
 
 ## Phases
 
@@ -61,13 +86,19 @@ Each phase ends with tests passing and a demo update, ready for review.
 ### Phase 0: internal label (core) — done
 
 - External `<label for>` / wrapping `<label>` don't name the focusable element inside the shadow DOM. Decision: don't support them; every form control has its own label.
-- `setupFieldLabel` / `updateFieldLabel` in `src/core/field-label.js`: `<label part="label">` with a `label` slot inside the shadow root, filled by the `label` attribute when nothing is slotted. Names the control via `ariaLabelledByElements`, focuses it on click, hidden when empty.
+- `setupFieldLabel` / `updateFieldLabel` in `src/core/field-label.ts`: `<label part="label">` with a `label` slot inside the shadow root, filled by the `label` attribute when nothing is slotted. Names the control via `ariaLabelledByElements`, focuses it on click, hidden when empty.
 - `label` property on `FormControl`. Applied to `ce-input` first; `ce-select` uses it from the start (the trigger is the control).
 
 ### Phase 1: reducer
 
-- `select-state.js` with `initialState`, `reduce`, and all actions above.
-- Unit tests per action plus the invariants, including the corner cases below that don't need the DOM.
+- `src/ce-select/select-state.ts`: `createState(config)`, `reduce(state, action)`, selectors `visibleOptions(state)`, `displayText(state)`, `formValues(state)`, and `checkInvariants(state)` (throws with the broken rule).
+- No DOM, no timers (type-ahead buffering lives in the component).
+- State is changed in place through one `set(state, changes, field, value)` helper, which records a field only when its value actually differs.
+- Written in the project style: plain loops, early returns, one small function per action.
+- Tests (`select-state.test.ts`):
+  - One `describe` per action, including its guards (disabled, missing option, disabled option, empty options).
+  - Corner cases from below that don't need the DOM.
+  - Random action sequences (seeded, a few thousand steps, no extra dependency) with `checkInvariants` after each step.
 
 ### Phase 2: `ce-option`
 
@@ -128,7 +159,7 @@ Each phase ends with tests passing and a demo update, ready for review.
 ### Phase 7: clear and polish
 
 - `with-clear`: reuse `ce-input`'s clear button approach (`mousedown` prevented, not in tab order, label "Clear", `clear-icon` slot, hidden when empty or disabled).
-- Demo page sections for each mode, `.d.ts` files, docs.
+- Demo page sections for each mode, docs.
 
 ## Corner cases
 

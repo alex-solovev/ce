@@ -81,8 +81,10 @@ Procedural and spacious: more lines are fine if each step reads on its own.
 - **Simple conditions.** Short combinations like `!this.#initialized || oldValue === newValue` are fine; split an `if` when its condition gets hard to read at a glance or a part needs its own comment.
 - **Always use braces**, even for one-line bodies.
 - **Blank lines between logical steps.**
-- **Plain loops instead of array methods** (`find`, `map`, `filter`, `some`…) where possible.
+- **Plain loops instead of transforming array methods** (`map`, `filter`, `reduce`, `flatMap`) and chains of them. Lookup methods are fine (`includes`, `indexOf`, `find`, `findIndex`): don't hand-write a loop that one of them already does.
 - **Don't extract single-use helpers** that only wrap a loop or a couple of lines; inline them.
+- **Named types, no inline object types.** Parameters, return types, annotations and union members use a named type (`function findLabel(root: ShadowRoot): LabelElements`), not `{ label: …; slot: … }` written in place.
+- **`type` by default, `interface` only for what a class `implements`.** The one other exception is augmenting an existing interface, like `HTMLElementTagNameMap`, which only works with `interface`.
 - **Function helpers over classes.** Shared behaviour goes in plain functions that take what they need (`setupFieldLabel(host, root, control)`). Use a class only when it's needed, e.g. custom elements themselves or a base class like `FormControl`.
 
 ```js
