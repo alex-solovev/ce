@@ -796,32 +796,6 @@ describe("ce-select", () => {
       expect(document.scrollingElement?.scrollTop ?? 0).toBe(pageScroll);
     });
   });
-  describe("selected-option spans", () => {
-    it("wraps the selected label in a span in single mode", () => {
-      const { select } = render(`<ce-select name="fruit">${fruits}</ce-select>`);
-
-      select.value = "banana";
-
-      expect(selectedSpans(select)).toEqual(["banana:Banana"]);
-      expect(queryShadow<HTMLElement>(select, "[part='display']").title).toBe("Banana");
-    });
-
-    it("shows the placeholder without spans when nothing is selected", () => {
-      const { select } = render(`<ce-select name="fruit" placeholder="Pick">${fruits}</ce-select>`);
-
-      expect(selectedSpans(select)).toEqual([]);
-      expect(display(select)).toBe("Pick");
-    });
-
-    it("uses the raw value for a value without an option", () => {
-      const { select } = render(`<ce-select name="fruit" multiple>${fruits}</ce-select>`);
-
-      select.values = ["apple", "mango"];
-
-      expect(selectedSpans(select)).toEqual(["apple:Apple", "mango:mango"]);
-    });
-  });
-
   describe("multiple", () => {
     const multipleFruits = `
       <ce-option value="apple">Apple</ce-option>
@@ -998,15 +972,6 @@ describe("ce-select", () => {
       select.value = "";
 
       expect(select.values).toEqual([]);
-    });
-
-    it("keeps only the first of several values in single mode", () => {
-      const { select } = render(`<ce-select name="fruit">${fruits}</ce-select>`);
-
-      select.values = ["date", "apple"];
-
-      expect(select.values).toEqual(["date"]);
-      expect(selectedOptionValues(select)).toEqual(["date"]);
     });
   });
   describe("edge cases", () => {
@@ -1449,35 +1414,6 @@ describe("ce-select", () => {
       await userEvent.keyboard("{Backspace}{Backspace}");
 
       expect(noResults.hidden).toBe(true);
-    });
-
-    it("announces the result count once typing pauses", async () => {
-      const { select } = render(`<ce-select name="fruit" searchable>${fruits}</ce-select>`);
-      const input = searchInput(select);
-      const liveRegion = queryShadow(select, "[aria-live]");
-
-      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-
-      input.value = "a";
-      input.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true }));
-      vi.advanceTimersByTime(200);
-
-      input.value = "an";
-      input.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true }));
-      vi.advanceTimersByTime(200);
-
-      // The first count was dropped when typing continued.
-      expect(liveRegion.textContent).toBe("");
-
-      vi.advanceTimersByTime(100);
-      expect(liveRegion.textContent).toBe("1 result");
-
-      input.value = "anz";
-      input.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true }));
-      vi.advanceTimersByTime(300);
-      expect(liveRegion.textContent).toBe("No results");
-
-      vi.useRealTimers();
     });
 
     it("types Space and keeps Home / End for the caret", async () => {

@@ -511,11 +511,6 @@ export function isPrintable(key: KeyInput): boolean {
   return key.key.length === 1 && !key.ctrlKey && !key.metaKey && !key.altKey;
 }
 
-/** Keys that change the search text. */
-export function isEditingKey(key: KeyInput): boolean {
-  return isPrintable(key) || key.key === "Backspace" || key.key === "Delete";
-}
-
 /** Throws if the state breaks a rule from the plan. Used by tests. */
 export function checkInvariants(state: State): void {
   if (!state.config.multiple && state.selection.length > 1) {
