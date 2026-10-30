@@ -162,7 +162,7 @@ export class CeSelect extends FormControl {
     });
 
     this.#render(logic.setConfig(this.#state, this.#configFromAttributes()));
-    render.triggerRole(context);
+    this.#switchTrigger();
     this.#syncOptions();
     this.#updateDisabled();
     render.label(context);
@@ -213,7 +213,7 @@ export class CeSelect extends FormControl {
       const hadFocus = this.matches(":focus-within");
 
       this.#render(logic.setConfig(this.#state, this.#configFromAttributes()));
-      render.triggerRole(context);
+      this.#switchTrigger();
 
       if (hadFocus) {
         render.trigger(context).focus();
@@ -296,13 +296,50 @@ export class CeSelect extends FormControl {
     };
   }
 
-  /** Updates the DOM for `changes`. Nothing is rendered before setup. */
+  /** Updates everything affected by `changes`. Nothing is rendered before setup. */
   #render(changes: Changes) {
-    if (!this.#context || changes.size === 0) {
+    const context = this.#context;
+
+    if (!context || changes.size === 0) {
       return;
     }
 
-    render.update(this.#context, changes);
+    // When the options changed, #syncOptions renders every option itself.
+    const haveOptionsChanged = changes.has("options");
+
+    if (changes.has("selection")) {
+      render.selection(context);
+    }
+
+    if (changes.has("selection") && !haveOptionsChanged) {
+      render.selectionChange(context);
+    }
+
+    if (changes.has("open")) {
+      render.open(context);
+    }
+
+    if (changes.has("navigation") && !haveOptionsChanged) {
+      render.highlightChange(context);
+    }
+
+    if (changes.has("query") || changes.has("config")) {
+      render.filter(context, !haveOptionsChanged);
+    }
+
+    if (changes.has("selection") || changes.has("query") || changes.has("config")) {
+      render.input(context);
+    }
+
+    if (changes.has("config")) {
+      render.disabled(context);
+      render.multiple(context);
+    }
+
+    // The check mark column changes on every option.
+    if (changes.has("config") && context.rendered.multiple !== this.#state.config.multiple) {
+      render.allOptions(context);
+    }
 
     // Pressing outside closes the list; only listened to while open.
     if (changes.has("open") && this.#state.open) {
@@ -314,6 +351,25 @@ export class CeSelect extends FormControl {
     if (!this.#state.open) {
       document.removeEventListener("mousedown", this.#onDocumentMousedown);
     }
+  }
+
+  /**
+   * Gives the combobox role to the input (searchable) or the box, and
+   * redraws what depends on which one it is.
+   */
+  #switchTrigger() {
+    const context = this.#context;
+
+    if (!context) {
+      return;
+    }
+
+    render.triggerRole(context);
+    render.disabled(context);
+    render.activeDescendant(context);
+    render.selection(context);
+    render.input(context);
+    render.label(context);
   }
 
   /** `input` and `change` when the user changed the selection. */

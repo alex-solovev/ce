@@ -81,6 +81,7 @@ One function per thing to draw: `render.selection(context, …)`, `render.option
 - They take the context (plus any attribute values they need) and write to the DOM directly, step by step.
 - Keep them straightforward: build and write in the same function. Extract a helper only when it's shared (`displayText` is used by both the selection and the search input).
 - They update only what changed, using `context.rendered` to remember what's on screen.
+- They do real DOM work. A function that only decides which other render functions to call (e.g. "for these changes, redraw this and that") belongs in the class: it has nothing to test on its own, short of spying on the functions it calls.
 
 ```ts
 // render.ts

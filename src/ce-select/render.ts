@@ -7,7 +7,7 @@ import { labelMarkup, labelStyles, updateFieldLabel } from "../core/field-label.
 import type { CeOption, OptionView } from "./ce-option.ts";
 import type { CeSelect } from "./ce-select.ts";
 import * as logic from "./logic.ts";
-import type { Changes, Option, State } from "./logic.ts";
+import type { Option, State } from "./logic.ts";
 
 const template = document.createElement("template");
 template.innerHTML = `
@@ -238,46 +238,6 @@ export function collectOptions(context: SelectContext): Option[] {
   context.elements = elements;
 
   return options;
-}
-
-/** Updates everything affected by `changes`. */
-export function update(context: SelectContext, changes: Changes): void {
-  // When the options changed, the component re-renders every option itself.
-  const haveOptionsChanged = changes.has("options");
-
-  if (changes.has("selection")) {
-    selection(context);
-  }
-
-  if (changes.has("selection") && !haveOptionsChanged) {
-    selectionChange(context);
-  }
-
-  if (changes.has("open")) {
-    open(context);
-  }
-
-  if (changes.has("navigation") && !haveOptionsChanged) {
-    highlightChange(context);
-  }
-
-  if (changes.has("query") || changes.has("config")) {
-    filter(context, !haveOptionsChanged);
-  }
-
-  if (changes.has("selection") || changes.has("query") || changes.has("config")) {
-    input(context);
-  }
-
-  if (changes.has("config")) {
-    disabled(context);
-    multiple(context);
-  }
-
-  // The check mark column changes on every option.
-  if (changes.has("config") && context.rendered.multiple !== context.state.config.multiple) {
-    allOptions(context);
-  }
 }
 
 /** The selected labels as spans (the placeholder when empty), the title and the form value. */
@@ -552,12 +512,6 @@ export function triggerRole(context: SelectContext): void {
 
   refs.input.hidden = !isSearchable;
   setState(internals, "searchable", isSearchable);
-
-  disabled(context);
-  activeDescendant(context);
-  selection(context);
-  input(context);
-  label(context);
 }
 
 /** Names the combobox and the listbox by the label. */
