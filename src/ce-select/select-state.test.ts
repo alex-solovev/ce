@@ -409,6 +409,26 @@ describe("TYPEAHEAD", () => {
     expect(state.navigation.highlighted).toBe("alice");
   });
 
+  it("searches from the top when opening without a selection", () => {
+    const state = run(withOptions({}, names), { type: "TYPEAHEAD", text: "b" });
+
+    expect(state.navigation.highlighted).toBe("bob");
+  });
+
+  it("searches after the selected option when opening with a selection", () => {
+    let state = run(withOptions({}, names), { type: "SELECT", value: "anna" });
+    state = run(state, { type: "TYPEAHEAD", text: "a" });
+
+    expect(state.navigation.highlighted).toBe("adam");
+  });
+
+  it("keeps the default highlight when opening finds no match", () => {
+    const state = run(withOptions({}, names), { type: "TYPEAHEAD", text: "z" });
+
+    expect(state.open).toBe(true);
+    expect(state.navigation.highlighted).toBe("bob");
+  });
+
   it("keeps the highlight when nothing matches, and is ignored when searchable", () => {
     const opened = run(withOptions({}, names), { type: "OPEN" });
     const searchable = withOptions({ searchable: true }, names);

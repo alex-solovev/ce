@@ -112,28 +112,28 @@ Each phase ends with tests passing and a demo update, ready for review.
 - Controlled by the select through the internal `setView({ selected, highlighted, filteredOut, showCheck })`: custom states `:state(selected)`, `:state(highlighted)`, `:state(filtered-out)`, `:state(checkable)`. Filtering hides via a state, never by changing user DOM.
 - The select builds the option data list itself (`value`, `label`, `disabled`, `defaultSelected`) from its `ce-option` children.
 
-### Phase 3: single select (plain)
+### Phase 3: single select (plain) — done
 
-- Shadow DOM: trigger box (`part="base"`, `role="combobox"`, `tabindex="0"`, `aria-haspopup="listbox"`, `aria-expanded`), display text (`part="display"`), chevron icon, listbox (`part="listbox"`, `role="listbox"`, `popover="manual"`) containing the default slot.
+- `src/ce-select/ce-select.ts`, extends `FormControl`, `delegatesFocus`. Shadow DOM: `FieldLabel`, trigger (`part="base"`, `role="combobox"`, `tabindex="0"`, `aria-haspopup="listbox"`, `aria-expanded`, `aria-controls`), display (`part="display"`), chevron, listbox (`part="listbox"`, `role="listbox"`, `popover="manual"`) with the default slot. Replaced by `ce-popover` later.
 - Positioning: CSS anchor positioning (`anchor-name` on the trigger, `position-anchor` on the popover), `position-try-fallbacks: flip-block`, width `anchor-size(width)`, max-height with scroll.
-- Highlight via `trigger.ariaActiveDescendantElement = option`. Scroll highlighted option into view (`block: "nearest"`).
+- `#dispatch(action, user)` → `reduce()` → `#render(changes)`; `input` + `change` only when a user action changed the selection.
+- Highlight via `trigger.ariaActiveDescendantElement = option`; scrolled within the listbox only (never the page).
+- Trigger and listbox are both named by the label (`ariaLabelledByElements`).
 - Keyboard (APG select-only combobox):
   - Closed: `↓` / `↑` / `Enter` / `Space` / `Alt+↓` open; `Home` / `End` open at first / last; printable chars open and type-ahead.
-  - Open: `↓` / `↑` move, `Home` / `End`, `PageUp` / `PageDown` (10 items), `Enter` / `Space` select and close, `Escape` closes without change, `Tab` selects highlighted and moves on, `Alt+↑` selects and closes.
-  - Type-ahead: buffer chars for 500 ms, match label prefix case-insensitively, repeated same char cycles.
-- Mouse: click trigger toggles; click option selects; `mousedown` on listbox `preventDefault` to keep focus on the trigger; click outside closes (listen on the root node, not `document`, so it works inside shadow roots).
-- Focus leaving the component closes without change.
-- Opening highlights the selected option, or the first enabled one.
-- Form: `setFormValue(value)` or `null` when nothing is selected. `formResetCallback` → `RESET`. `formStateRestoreCallback` → `RESTORE`. `formDisabledCallback` → `DISABLED`.
-- Enter while closed: implicit submit via `submitImplicitly`, like `ce-input`.
-- Placeholder when empty.
+  - Open: `↓` / `↑` / `Home` / `End` / `PageUp` / `PageDown` move; `Enter` / `Alt+↑` select and close; `Space` selects unless a type-ahead is in progress; `Escape` closes without change and stops propagation; `Tab` selects the highlighted option, closes and lets focus move.
+  - **Decisions:** Enter while closed opens (APG), not implicit submit. Tab selects (APG), unlike `wa-select`.
+- Mouse: `mousedown` on the trigger toggles (and keeps focus); options select on `mouseup`, so press-drag-release works; `pointermove` highlights (not `mouseover`, so keyboard scrolling under a still pointer doesn't move it); `mousedown` in the listbox keeps focus on the trigger; `mousedown` outside closes (document listener only while open).
+- Focus leaving the component → `BLUR`.
+- Form: `setFormValue(value)` or `null`; reset → `RESET`, restore → `RESTORE`, disabled (attribute or fieldset) → `CONFIG`, plus `tabindex="-1"` and `aria-disabled`.
+- `value` property: `""` when nothing is selected; setting `""` clears.
+- Custom states on the host: `:state(blank)`, `:state(open)`.
+- Option data is built from `ce-option` children by one `MutationObserver` (from phase 4, see below).
 
 ### Phase 4: option sources
 
-- `MutationObserver` on the host: `childList`, `subtree`, `characterData`, and attributes `value` / `disabled` / `selected` / `label`. Batch to one `OPTIONS_CHANGED` per microtask.
-- `options` setter: `[{ value, label, disabled, selected }]` → replaces children with generated `ce-option` elements. Getter returns the snapshot.
-- `value` setter before options exist → stored with `label: null`, filled in when options arrive.
-- Replacing all options (e.g. new search results) keeps the selection and its labels.
+- Done in phase 3: one `MutationObserver` on the host (`childList`, `subtree`, `characterData`, attributes `value` / `disabled` / `selected`). Each batch → `refresh()` on options whose text changed, then one `OPTIONS_CHANGED`. A value set before options exist is labelled when they arrive; replacing all options keeps the selection and its labels.
+- Remaining: `options` setter (`[{ value, label, disabled, selected }]` → generated `ce-option` children; getter returns the snapshot).
 
 ### Phase 5: multiple
 

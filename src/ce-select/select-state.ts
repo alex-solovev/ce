@@ -446,8 +446,31 @@ function typeahead(state: State, changes: Changes, text: string): void {
     return;
   }
 
+  const wasOpen = state.open;
+
   open(state, changes);
-  track(changes, matchTypeahead(state.navigation, text));
+
+  // Opening highlights the selected option, so the search continues after
+  // it. With nothing selected that highlight is only a default: search from
+  // the top, so "n" finds the first "N…" option rather than the second.
+  if (wasOpen || state.selection.length > 0) {
+    track(changes, matchTypeahead(state.navigation, text));
+    return;
+  }
+
+  const fallback = state.navigation.highlighted;
+
+  track(changes, clearHighlight(state.navigation));
+
+  if (matchTypeahead(state.navigation, text)) {
+    track(changes, true);
+    return;
+  }
+
+  // No match: keep the default highlight.
+  if (fallback !== null) {
+    track(changes, highlightValue(state.navigation, fallback));
+  }
 }
 
 /** Searchable only: the user typed in the input. */

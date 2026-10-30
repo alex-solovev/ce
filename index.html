@@ -7,6 +7,7 @@
     <script type="module" src="/src/hello-world/hello-world.ts"></script>
     <script type="module" src="/src/ce-input/ce-input.ts"></script>
     <script type="module" src="/src/ce-icon/ce-icon.ts"></script>
+    <script type="module" src="/src/ce-select/ce-select.ts"></script>
   </head>
   <body>
     <p><hello-world></hello-world></p>
@@ -29,9 +30,26 @@
           <ce-icon slot="start" name="magnifying-glass"></ce-icon>
         </ce-input>
       </p>
+      <p>
+        <ce-select name="fruit" label="Fruit" placeholder="Pick a fruit">
+          <ce-option value="apple">Apple</ce-option>
+          <ce-option value="banana">
+            Banana
+            <span slot="description">Yellow and soft</span>
+          </ce-option>
+          <ce-option value="cherry" disabled>Cherry (out of season)</ce-option>
+          <ce-option value="date" selected>Date</ce-option>
+          <ce-option value="elderberry">Elderberry</ce-option>
+        </ce-select>
+      </p>
       <fieldset id="group">
         <legend>Fieldset</legend>
         <ce-input name="city" label="City" value="London"></ce-input>
+        <ce-select name="size" label="Size" placeholder="Select size">
+          <ce-option value="s">Small</ce-option>
+          <ce-option value="m">Medium</ce-option>
+          <ce-option value="l">Large</ce-option>
+        </ce-select>
       </fieldset>
       <p>
         <label><input type="checkbox" id="toggle-group" /> Disable fieldset</label>
