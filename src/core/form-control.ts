@@ -7,67 +7,73 @@
  *
  * Effective disabled state (own attribute or a disabled fieldset ancestor)
  * is available as `this.matches(":disabled")`.
+ *
+ * @attr name - Name used when submitting the form.
+ * @attr label - Visible label. Use the `label` slot for rich content. External `<label>` elements aren't supported.
+ * @attr disabled - Disables the control. A disabled fieldset ancestor also disables it.
  */
 export class FormControl extends HTMLElement {
-  static formAssociated = true;
+  static formAssociated: boolean = true;
 
-  /** @protected @readonly */
-  internals;
+  protected readonly internals: ElementInternals;
 
   constructor() {
     super();
     this.internals = this.attachInternals();
   }
 
-  get form() {
+  get form(): HTMLFormElement | null {
     return this.internals.form;
   }
 
-  get name() {
+  /** Reflects the `name` attribute. */
+  get name(): string {
     return this.getAttribute("name") ?? "";
   }
 
-  set name(value) {
+  set name(value: string) {
     this.setAttribute("name", value);
   }
 
-  get label() {
+  /** Reflects the `label` attribute. */
+  get label(): string {
     return this.getAttribute("label") ?? "";
   }
 
-  set label(value) {
+  set label(value: string) {
     this.setAttribute("label", value);
   }
 
-  get disabled() {
+  /** Reflects the `disabled` attribute. Use `matches(":disabled")` for the effective state. */
+  get disabled(): boolean {
     return this.hasAttribute("disabled");
   }
 
-  set disabled(value) {
+  set disabled(value: boolean) {
     this.toggleAttribute("disabled", Boolean(value));
   }
 
-  get validity() {
+  get validity(): ValidityState {
     return this.internals.validity;
   }
 
-  get validationMessage() {
+  get validationMessage(): string {
     return this.internals.validationMessage;
   }
 
-  get willValidate() {
+  get willValidate(): boolean {
     return this.internals.willValidate;
   }
 
-  get labels() {
+  get labels(): NodeList {
     return this.internals.labels;
   }
 
-  checkValidity() {
+  checkValidity(): boolean {
     return this.internals.checkValidity();
   }
 
-  reportValidity() {
+  reportValidity(): boolean {
     return this.internals.reportValidity();
   }
 }

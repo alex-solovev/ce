@@ -2,21 +2,22 @@
 // `label` slot. Lives in the same shadow root as the control, so it can name
 // it directly. External `<label>` elements aren't supported.
 
-export const labelMarkup = `<label part="label" hidden><slot name="label"></slot></label>`;
+/** `<label part="label">` with a `label` slot, to put in a form control's shadow root. */
+export const labelMarkup: string = `<label part="label" hidden><slot name="label"></slot></label>`;
 
-export const labelStyles = `
+/** Styles for `labelMarkup`. */
+export const labelStyles: string = `
   [part="label"] { display: block; margin-block-end: 0.25em; }
   [part="label"][hidden] { display: none; }
 `;
 
 /**
- * Adds the label's listeners. Call once, after `labelMarkup` is in `root`.
+ * Adds the label's listeners: clicking it focuses `control`, and slot changes
+ * update it. Call once, after `labelMarkup` is in `root`.
  *
- * @param {HTMLElement} host
- * @param {ShadowRoot} root
- * @param {HTMLElement} control The focusable element to name.
+ * @param control The focusable element to name.
  */
-export function setupFieldLabel(host, root, control) {
+export function setupFieldLabel(host: HTMLElement, root: ShadowRoot, control: HTMLElement): void {
   const { label, slot } = findLabel(root);
 
   slot.addEventListener("slotchange", () => {
@@ -29,14 +30,10 @@ export function setupFieldLabel(host, root, control) {
 }
 
 /**
- * Shows the `label` attribute or slotted content, and names the control by
- * it. Call on connect and when the `label` attribute changes.
- *
- * @param {HTMLElement} host
- * @param {ShadowRoot} root
- * @param {HTMLElement} control
+ * Shows the host's `label` attribute or slotted content, and names the
+ * control by it. Call on connect and when the `label` attribute changes.
  */
-export function updateFieldLabel(host, root, control) {
+export function updateFieldLabel(host: HTMLElement, root: ShadowRoot, control: HTMLElement): void {
   const { label, slot } = findLabel(root);
   const text = host.getAttribute("label") ?? "";
 
@@ -60,8 +57,7 @@ export function updateFieldLabel(host, root, control) {
   control.ariaLabelledByElements = [label];
 }
 
-/** @param {ShadowRoot} root */
-function findLabel(root) {
+function findLabel(root: ShadowRoot): { label: HTMLLabelElement; slot: HTMLSlotElement } {
   const label = root.querySelector("label[part='label']");
   const slot = label?.querySelector("slot[name='label']");
 

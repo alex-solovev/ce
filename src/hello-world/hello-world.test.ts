@@ -1,15 +1,12 @@
 import { afterEach, describe, expect, it } from "vite-plus/test";
-import "./hello-world.js";
+import { query } from "../core/test-dom.ts";
+import "./hello-world.ts";
 
 afterEach(() => {
   document.body.replaceChildren();
 });
 
-/**
- * @param {Element} host
- * @returns {string | null | undefined}
- */
-function greeting(host) {
+function greeting(host: Element): string | null | undefined {
   return host.shadowRoot?.querySelector("span")?.textContent;
 }
 
@@ -23,7 +20,7 @@ describe("hello-world", () => {
 
   it("greets the name attribute and follows changes", () => {
     document.body.innerHTML = `<hello-world name="Ada"></hello-world>`;
-    const element = document.querySelector("hello-world");
+    const element = query(document, "hello-world");
 
     expect(greeting(element)).toBe("Hello, Ada!");
 

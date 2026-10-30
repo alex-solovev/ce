@@ -4,9 +4,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>custom-elements</title>
-    <script type="module" src="/src/hello-world/hello-world.js"></script>
-    <script type="module" src="/src/ce-input/ce-input.js"></script>
-    <script type="module" src="/src/ce-icon/ce-icon.js"></script>
+    <script type="module" src="/src/hello-world/hello-world.ts"></script>
+    <script type="module" src="/src/ce-input/ce-input.ts"></script>
+    <script type="module" src="/src/ce-icon/ce-icon.ts"></script>
   </head>
   <body>
     <p><hello-world></hello-world></p>
@@ -71,8 +71,8 @@
     </script>
 
     <script type="module">
-      import { defaultIcons } from "/src/ce-icon/icon-library-default.js";
-      import { registerIconLibrary } from "/src/ce-icon/icon-library.js";
+      import { defaultIcons } from "/src/ce-icon/icon-library-default.ts";
+      import { registerIconLibrary } from "/src/ce-icon/icon-library.ts";
 
       const defaultIconsRow = document.querySelector("#default-icons");
 

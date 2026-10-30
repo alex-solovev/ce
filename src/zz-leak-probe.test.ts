@@ -1,8 +1,9 @@
 // Temporary probe: does a removed ce-input get garbage collected, given that
-// FieldLabel never removes its slotchange / click listeners?
+// setupFieldLabel never removes its slotchange / click listeners?
 import { expect, it } from "vite-plus/test";
 import { cdp } from "vite-plus/test/browser/context";
-import "./ce-input/ce-input.js";
+import "./ce-input/ce-input.ts";
+import { query, queryShadow } from "./core/test-dom.ts";
 
 async function collectGarbage() {
   for (let i = 0; i < 5; i++) {
@@ -14,20 +15,20 @@ async function collectGarbage() {
 /**
  * Renders a ce-input, interacts with it so the listeners have run, removes it
  * and returns only weak references.
- * @param {(host: HTMLElement) => void} [extra] Extra setup, e.g. a leaking listener.
+ * @param extra Extra setup, e.g. a leaking listener.
  */
-function renderAndRemove(extra) {
+function renderAndRemove(extra?: (host: HTMLElement) => void) {
   const container = document.createElement("div");
   container.innerHTML = `<ce-input name="first" label="First name"><span slot="label">Slotted</span></ce-input>`;
   document.body.append(container);
 
-  const host = container.querySelector("ce-input");
-  const label = host.shadowRoot.querySelector("[part='label']");
-  const slot = label.querySelector("slot");
+  const host = query(container, "ce-input");
+  const label = queryShadow<HTMLLabelElement>(host, "[part='label']");
+  const slot = query(label, "slot");
 
   // Make sure both listeners have actually fired.
   label.click();
-  host.querySelector("span").remove();
+  query(host, "span").remove();
 
   extra?.(host);
 
@@ -40,7 +41,7 @@ function renderAndRemove(extra) {
   };
 }
 
-it("collects a removed ce-input with its FieldLabel listeners", async () => {
+it("collects a removed ce-input with its label listeners", async () => {
   const refs = renderAndRemove();
 
   // Let slotchange fire before collecting.
@@ -53,14 +54,19 @@ it("collects a removed ce-input with its FieldLabel listeners", async () => {
 });
 
 it("control: a document listener holding the host keeps it alive", async () => {
-  /** @type {(() => void) | null} */
-  let listener = null;
+  // Only the listener may hold the host, so keep just a way to remove it.
+  const cleanup: { remove?: () => void } = {};
 
   const refs = renderAndRemove((host) => {
-    listener = () => {
+    const listener = () => {
       host.focus();
     };
+
     document.addEventListener("click", listener);
+
+    cleanup.remove = () => {
+      document.removeEventListener("click", listener);
+    };
   });
 
   await new Promise((resolve) => setTimeout(resolve, 50));
@@ -69,8 +75,8 @@ it("control: a document listener holding the host keeps it alive", async () => {
   expect(refs.host.deref()).not.toBe(undefined);
 
   // Removing the listener frees it.
-  document.removeEventListener("click", listener);
-  listener = null;
+  cleanup.remove?.();
+  delete cleanup.remove;
   await collectGarbage();
 
   expect(refs.host.deref()).toBe(undefined);

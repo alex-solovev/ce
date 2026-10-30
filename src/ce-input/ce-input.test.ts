@@ -1,17 +1,14 @@
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser/context";
-import { accessibleNodesWithRole } from "../core/test-accessibility.js";
-import "./ce-input.js";
+import { accessibleNodesWithRole } from "../core/test-accessibility.ts";
+import { query, queryShadow } from "../core/test-dom.ts";
+import "./ce-input.ts";
 
 afterEach(() => {
   document.body.replaceChildren();
 });
 
-/**
- * @param {string} html
- * @returns {HTMLFormElement}
- */
-function renderForm(html) {
+function renderForm(html: string): HTMLFormElement {
   const form = document.createElement("form");
   form.innerHTML = html;
 
@@ -25,18 +22,8 @@ function renderForm(html) {
   return form;
 }
 
-/**
- * @param {Element} host
- * @returns {HTMLInputElement}
- */
-function innerInput(host) {
-  const input = host.shadowRoot?.querySelector("input");
-
-  if (!input) {
-    throw new Error("ce-input has no inner input");
-  }
-
-  return input;
+function innerInput(host: Element): HTMLInputElement {
+  return queryShadow(host, "input");
 }
 
 describe("ce-input", () => {
@@ -49,7 +36,7 @@ describe("ce-input", () => {
 
     it("submits what the user types", async () => {
       const form = renderForm(`<ce-input name="first"></ce-input>`);
-      const input = form.querySelector("ce-input");
+      const input = query(form, "ce-input");
 
       await userEvent.click(innerInput(input));
       await userEvent.keyboard("Ada");
@@ -60,7 +47,7 @@ describe("ce-input", () => {
 
     it("doesn't reflect the value property to the attribute", () => {
       const form = renderForm(`<ce-input name="first" value="Ada"></ce-input>`);
-      const input = form.querySelector("ce-input");
+      const input = query(form, "ce-input");
 
       input.value = "Grace";
 
@@ -71,7 +58,7 @@ describe("ce-input", () => {
 
     it("follows the value attribute until the value is changed", () => {
       const form = renderForm(`<ce-input name="first" value="Ada"></ce-input>`);
-      const input = form.querySelector("ce-input");
+      const input = query(form, "ce-input");
 
       input.setAttribute("value", "Grace");
       expect(input.value).toBe("Grace");
@@ -85,7 +72,7 @@ describe("ce-input", () => {
   describe("reset", () => {
     it("restores the value attribute", () => {
       const form = renderForm(`<ce-input name="first" value="Ada"></ce-input>`);
-      const input = form.querySelector("ce-input");
+      const input = query(form, "ce-input");
 
       input.value = "Grace";
       form.reset();
@@ -99,7 +86,7 @@ describe("ce-input", () => {
   describe("disabled", () => {
     it("isn't submitted when disabled", () => {
       const form = renderForm(`<ce-input name="first" value="Ada" disabled></ce-input>`);
-      const input = form.querySelector("ce-input");
+      const input = query(form, "ce-input");
 
       expect(new FormData(form).has("first")).toBe(false);
       expect(innerInput(input).disabled).toBe(true);
@@ -111,8 +98,8 @@ describe("ce-input", () => {
           <ce-input name="first" value="Ada"></ce-input>
         </fieldset>
       `);
-      const fieldset = form.querySelector("fieldset");
-      const input = form.querySelector("ce-input");
+      const fieldset = query(form, "fieldset");
+      const input = query(form, "ce-input");
 
       fieldset.disabled = true;
 
@@ -130,7 +117,7 @@ describe("ce-input", () => {
   describe("Enter", () => {
     it("submits the form", async () => {
       const form = renderForm(`<ce-input name="first"></ce-input>`);
-      const input = form.querySelector("ce-input");
+      const input = query(form, "ce-input");
       let submitted = false;
 
       form.addEventListener("submit", () => {
@@ -145,7 +132,7 @@ describe("ce-input", () => {
 
     it("doesn't submit when keydown is prevented", async () => {
       const form = renderForm(`<ce-input name="first"></ce-input>`);
-      const input = form.querySelector("ce-input");
+      const input = query(form, "ce-input");
       let submitted = false;
 
       form.addEventListener("submit", () => {
@@ -176,13 +163,13 @@ describe("ce-input", () => {
           <span slot="end">kg</span>
         </ce-input>
       `);
-      const input = form.querySelector("ce-input");
-      const base = input.shadowRoot?.querySelector("[part='base']");
-      const start = base?.querySelector("slot[name='start']");
-      const end = base?.querySelector("slot[name='end']");
+      const input = query(form, "ce-input");
+      const base = queryShadow(input, "[part='base']");
+      const start = query<HTMLSlotElement>(base, "slot[name='start']");
+      const end = query<HTMLSlotElement>(base, "slot[name='end']");
 
-      expect(start?.assignedElements()).toEqual([form.querySelector("ce-icon")]);
-      expect(end?.assignedElements()).toEqual([form.querySelector("span")]);
+      expect(start.assignedElements()).toEqual([query(form, "ce-icon")]);
+      expect(end.assignedElements()).toEqual([query(form, "span")]);
     });
 
     it("focus the input when clicked", async () => {
@@ -191,35 +178,28 @@ describe("ce-input", () => {
           <ce-icon slot="start" name="magnifying-glass"></ce-icon>
         </ce-input>
       `);
-      const input = form.querySelector("ce-input");
+      const input = query(form, "ce-input");
 
-      await userEvent.click(form.querySelector("ce-icon"));
+      await userEvent.click(query(form, "ce-icon"));
 
       expect(input.shadowRoot?.activeElement).toBe(innerInput(input));
     });
   });
 
   describe("clear button", () => {
-    /** @param {Element} host */
-    function clearButton(host) {
-      const button = host.shadowRoot?.querySelector("[part='clear-button']");
-
-      if (!(button instanceof HTMLButtonElement)) {
-        throw new Error("ce-input has no clear button");
-      }
-
-      return button;
+    function clearButton(host: Element): HTMLButtonElement {
+      return queryShadow<HTMLButtonElement>(host, "[part='clear-button']");
     }
 
     it("is hidden without with-clear", () => {
       const form = renderForm(`<ce-input name="query" value="cats"></ce-input>`);
 
-      expect(clearButton(form.querySelector("ce-input")).hidden).toBe(true);
+      expect(clearButton(query(form, "ce-input")).hidden).toBe(true);
     });
 
     it("is shown only while there's a value", async () => {
       const form = renderForm(`<ce-input name="query" with-clear></ce-input>`);
-      const input = form.querySelector("ce-input");
+      const input = query(form, "ce-input");
 
       expect(clearButton(input).hidden).toBe(true);
 
@@ -234,15 +214,14 @@ describe("ce-input", () => {
         `<ce-input name="query" value="cats" with-clear disabled></ce-input>`,
       );
 
-      expect(clearButton(form.querySelector("ce-input")).hidden).toBe(true);
+      expect(clearButton(query(form, "ce-input")).hidden).toBe(true);
     });
 
     it("clears the value, fires input and change, and focuses the input", async () => {
       const form = renderForm(`<ce-input name="query" value="cats" with-clear></ce-input>`);
-      const input = form.querySelector("ce-input");
+      const input = query(form, "ce-input");
 
-      /** @type {string[]} */
-      const events = [];
+      const events: string[] = [];
 
       input.addEventListener("input", () => {
         events.push("input");
@@ -264,21 +243,14 @@ describe("ce-input", () => {
   });
 
   describe("label", () => {
-    /** @param {Element} host */
-    function label(host) {
-      const element = host.shadowRoot?.querySelector("[part='label']");
-
-      if (!(element instanceof HTMLLabelElement)) {
-        throw new Error("ce-input has no label");
-      }
-
-      return element;
+    function label(host: Element): HTMLLabelElement {
+      return queryShadow<HTMLLabelElement>(host, "[part='label']");
     }
 
     it("names the input by the label attribute", async () => {
       const form = renderForm(`<ce-input name="first" label="First name"></ce-input>`);
 
-      expect(label(form.querySelector("ce-input")).hidden).toBe(false);
+      expect(label(query(form, "ce-input")).hidden).toBe(false);
       expect(await accessibleNodesWithRole("textbox")).toEqual(["textbox:First name"]);
     });
 
@@ -289,13 +261,13 @@ describe("ce-input", () => {
         </ce-input>
       `);
 
-      expect(label(form.querySelector("ce-input")).hidden).toBe(false);
+      expect(label(query(form, "ce-input")).hidden).toBe(false);
       expect(await accessibleNodesWithRole("textbox")).toEqual(["textbox:First name"]);
     });
 
     it("follows label attribute changes", async () => {
       const form = renderForm(`<ce-input name="first" label="First name"></ce-input>`);
-      const input = form.querySelector("ce-input");
+      const input = query(form, "ce-input");
 
       input.label = "Given name";
 
@@ -304,7 +276,7 @@ describe("ce-input", () => {
 
     it("focuses the input when clicked", async () => {
       const form = renderForm(`<ce-input name="first" label="First name"></ce-input>`);
-      const input = form.querySelector("ce-input");
+      const input = query(form, "ce-input");
 
       await userEvent.click(label(input));
 
@@ -314,7 +286,7 @@ describe("ce-input", () => {
     it("is hidden without a label, leaving the placeholder as the name", async () => {
       const form = renderForm(`<ce-input name="query" placeholder="Search"></ce-input>`);
 
-      expect(label(form.querySelector("ce-input")).hidden).toBe(true);
+      expect(label(query(form, "ce-input")).hidden).toBe(true);
       expect(await accessibleNodesWithRole("textbox")).toEqual(["textbox:Search"]);
     });
   });

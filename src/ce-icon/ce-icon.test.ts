@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from "vite-plus/test";
-import { accessibleNodesWithRole } from "../core/test-accessibility.js";
-import "./ce-icon.js";
-import { registerIconLibrary } from "./icon-library.js";
+import { accessibleNodesWithRole } from "../core/test-accessibility.ts";
+import { query } from "../core/test-dom.ts";
+import "./ce-icon.ts";
+import { registerIconLibrary } from "./icon-library.ts";
 
 const square = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" /></svg>`;
 const circle = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><circle cx="5" cy="5" r="5" /></svg>`;
@@ -10,24 +11,13 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/**
- * @param {string} html
- * @returns {HTMLElement}
- */
-function render(html) {
+function render(html: string): HTMLElement {
   document.body.innerHTML = html;
 
-  const icon = document.querySelector("ce-icon");
-
-  if (!icon) {
-    throw new Error("No ce-icon rendered");
-  }
-
-  return icon;
+  return query(document, "ce-icon");
 }
 
-/** @param {Element} icon */
-function renderedSvg(icon) {
+function renderedSvg(icon: Element): SVGSVGElement | null {
   return icon.shadowRoot?.querySelector("svg") ?? null;
 }
 

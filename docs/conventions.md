@@ -71,7 +71,7 @@ Prefer `ElementInternals` (forms, ARIA, `states` for `:state(...)` CSS) and `Mut
 
 ## 7. Labels
 
-Form controls are labelled by their own `label` attribute or `label` slot (`setupFieldLabel` / `updateFieldLabel` in `src/core/field-label.js`), never by external `<label for>` or a wrapping `<label>`. An external label names the host, not the focusable element inside the shadow DOM, so screen readers would announce an unnamed control while clicking the label still appears to work.
+Form controls are labelled by their own `label` attribute or `label` slot (`setupFieldLabel` / `updateFieldLabel` in `src/core/field-label.ts`), never by external `<label for>` or a wrapping `<label>`. An external label names the host, not the focusable element inside the shadow DOM, so screen readers would announce an unnamed control while clicking the label still appears to work.
 
 ## 8. Code style
 

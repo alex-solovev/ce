@@ -6,17 +6,20 @@ import { cdp } from "vite-plus/test/browser/context";
 /**
  * Accessible nodes of the test page, as "role:name" strings with trimmed
  * names, skipping ignored nodes and text runs.
- * @returns {Promise<string[]>}
  */
-export async function accessibleNodes() {
+export async function accessibleNodes(): Promise<string[]> {
   const { frameTree } = await cdp().send("Page.getFrameTree");
 
   // Tests run inside an iframe of the Vitest runner page.
-  const frameId = frameTree.childFrames[0].frame.id;
-  const { nodes } = await cdp().send("Accessibility.getFullAXTree", { frameId });
+  const frame = frameTree.childFrames?.[0]?.frame;
 
-  /** @type {string[]} */
-  const result = [];
+  if (!frame) {
+    throw new Error("No test iframe found");
+  }
+
+  const { nodes } = await cdp().send("Accessibility.getFullAXTree", { frameId: frame.id });
+
+  const result: string[] = [];
 
   for (const node of nodes) {
     if (node.ignored) {
@@ -38,14 +41,9 @@ export async function accessibleNodes() {
   return result;
 }
 
-/**
- * Accessible nodes with the given role, as "role:name" strings.
- * @param {string} role
- * @returns {Promise<string[]>}
- */
-export async function accessibleNodesWithRole(role) {
-  /** @type {string[]} */
-  const result = [];
+/** Accessible nodes with the given role, as "role:name" strings. */
+export async function accessibleNodesWithRole(role: string): Promise<string[]> {
+  const result: string[] = [];
 
   for (const node of await accessibleNodes()) {
     if (node.startsWith(`${role}:`)) {

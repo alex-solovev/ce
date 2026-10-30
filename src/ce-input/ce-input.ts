@@ -1,12 +1,12 @@
-import "../ce-icon/ce-icon.js";
-import { FormControl } from "../core/form-control.js";
+import "../ce-icon/ce-icon.ts";
+import { FormControl } from "../core/form-control.ts";
 import {
   labelMarkup,
   labelStyles,
   setupFieldLabel,
   updateFieldLabel,
-} from "../core/field-label.js";
-import { submitImplicitly } from "../core/implicit-submit.js";
+} from "../core/field-label.ts";
+import { submitImplicitly } from "../core/implicit-submit.ts";
 
 const template = document.createElement("template");
 template.innerHTML = `
@@ -67,60 +67,78 @@ template.innerHTML = `
   </div>
 `;
 
+/**
+ * Single-line text input.
+ *
+ * @attr value - Default value, restored on form reset.
+ * @attr placeholder - Placeholder text.
+ * @attr with-clear - Shows a button that clears the value.
+ * @slot label - Rich label content. Overrides the `label` attribute.
+ * @slot start - Decorative content before the input, such as an unlabeled `<ce-icon>`. Not for interactive content.
+ * @slot end - Decorative content after the input. Not for interactive content.
+ * @slot clear-icon - Replaces the clear button's default icon.
+ * @csspart label - The label.
+ * @csspart base - The box around the input and slots.
+ * @csspart input - The inner native input.
+ * @csspart clear-button - The clear button.
+ * @fires input - On every edit.
+ * @fires change - When an edit is committed.
+ */
 export class CeInput extends FormControl {
-  static observedAttributes = ["value", "placeholder", "with-clear", "label"];
+  static observedAttributes: string[] = ["value", "placeholder", "with-clear", "label"];
 
   #initialized = false;
 
-  /** @type {HTMLInputElement | null} */
-  #input = null;
+  #input: HTMLInputElement | null = null;
 
-  /** @type {HTMLButtonElement | null} */
-  #clearButton = null;
+  #clearButton: HTMLButtonElement | null = null;
 
   /**
    * Value set by the user or the `value` property. While null, the `value`
    * attribute (default value) applies, as with native `<input>`.
-   * @type {string | null}
    */
-  #dirtyValue = null;
+  #dirtyValue: string | null = null;
 
-  get defaultValue() {
+  /** Reflects the `value` attribute. */
+  get defaultValue(): string {
     return this.getAttribute("value") ?? "";
   }
 
-  set defaultValue(value) {
+  set defaultValue(value: string) {
     this.setAttribute("value", value);
   }
 
-  get value() {
+  /** Current value. Doesn't reflect. */
+  get value(): string {
     return this.#dirtyValue ?? this.defaultValue;
   }
 
-  set value(value) {
+  set value(value: string) {
     // Unlike other properties this doesn't reflect: the `value` attribute is
     // the default value, matching native `<input>`.
     this.#dirtyValue = String(value);
     this.#updateValue();
   }
 
-  get placeholder() {
+  /** Reflects the `placeholder` attribute. */
+  get placeholder(): string {
     return this.getAttribute("placeholder") ?? "";
   }
 
-  set placeholder(value) {
+  set placeholder(value: string) {
     this.setAttribute("placeholder", value);
   }
 
-  get withClear() {
+  /** Reflects the `with-clear` attribute. */
+  get withClear(): boolean {
     return this.hasAttribute("with-clear");
   }
 
-  set withClear(value) {
+  set withClear(value: boolean) {
     this.toggleAttribute("with-clear", Boolean(value));
   }
 
-  connectedCallback() {
+  connectedCallback(): void {
     if (!this.#initialized) {
       this.#setup();
       this.#initialized = true;
@@ -132,12 +150,7 @@ export class CeInput extends FormControl {
     this.#updateLabel();
   }
 
-  /**
-   * @param {string} name
-   * @param {string | null} oldValue
-   * @param {string | null} newValue
-   */
-  attributeChangedCallback(name, oldValue, newValue) {
+  attributeChangedCallback(name: string, oldValue: string | null, newValue: string | null): void {
     if (!this.#initialized) {
       return;
     }
@@ -167,17 +180,16 @@ export class CeInput extends FormControl {
     }
   }
 
-  formDisabledCallback() {
+  formDisabledCallback(): void {
     this.#updateDisabled();
   }
 
-  formResetCallback() {
+  formResetCallback(): void {
     this.#dirtyValue = null;
     this.#updateValue();
   }
 
-  /** @param {string | File | FormData | null} state */
-  formStateRestoreCallback(state) {
+  formStateRestoreCallback(state: string | File | FormData | null): void {
     if (typeof state !== "string") {
       return;
     }
@@ -224,8 +236,7 @@ export class CeInput extends FormControl {
     this.dispatchEvent(new Event("change", { bubbles: true }));
   };
 
-  /** @param {KeyboardEvent} event */
-  #onKeydown = (event) => {
+  #onKeydown = (event: KeyboardEvent) => {
     if (event.key !== "Enter") {
       return;
     }
@@ -242,8 +253,7 @@ export class CeInput extends FormControl {
     submitImplicitly(this);
   };
 
-  /** @param {MouseEvent} event */
-  #onClearMousedown = (event) => {
+  #onClearMousedown = (event: MouseEvent) => {
     // Keep focus in the input instead of moving it to the button.
     event.preventDefault();
   };
@@ -311,6 +321,12 @@ export class CeInput extends FormControl {
     const disabled = this.matches(":disabled");
 
     this.#clearButton.hidden = !this.withClear || !hasValue || disabled;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "ce-input": CeInput;
   }
 }
 

@@ -1,3 +1,5 @@
+import type { FormControl } from "./form-control.ts";
+
 /**
  * Implicit submission, as when pressing Enter in a native text input: clicks
  * the form's default button, or submits the form if it has none.
@@ -5,10 +7,8 @@
  *
  * Unlike native, a form without a default button submits even when it has
  * several fields.
- *
- * @param {import("./form-control.js").FormControl} control
  */
-export function submitImplicitly(control) {
+export function submitImplicitly(control: FormControl): void {
   const form = control.form;
 
   if (!form) {
@@ -32,12 +32,8 @@ export function submitImplicitly(control) {
   form.requestSubmit();
 }
 
-/**
- * Native submit buttons, and our controls that expose a `type` of "submit".
- * @param {Element} element
- * @returns {element is HTMLElement}
- */
-function isSubmitButton(element) {
+/** Native submit buttons, and our controls that expose a `type` of "submit". */
+function isSubmitButton(element: Element): element is HTMLElement {
   if (!(element instanceof HTMLElement)) {
     return false;
   }

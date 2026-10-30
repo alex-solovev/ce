@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vite-plus/test";
-import { FormControl } from "./form-control.js";
-import { submitImplicitly } from "./implicit-submit.js";
+import { FormControl } from "./form-control.ts";
+import { submitImplicitly } from "./implicit-submit.ts";
+import { query } from "./test-dom.ts";
 
 class TestControl extends FormControl {}
 
@@ -10,16 +11,12 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/**
- * Renders a form and records its submit events instead of navigating.
- * @param {string} html
- */
-function renderForm(html) {
+/** Renders a form and records its submit events instead of navigating. */
+function renderForm(html: string) {
   const form = document.createElement("form");
   form.innerHTML = html;
 
-  /** @type {SubmitEvent[]} */
-  const submits = [];
+  const submits: SubmitEvent[] = [];
 
   form.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -28,7 +25,7 @@ function renderForm(html) {
 
   document.body.append(form);
 
-  const control = form.querySelector("test-control");
+  const control = query<TestControl>(form, "test-control");
 
   return { form, control, submits };
 }
@@ -39,12 +36,12 @@ describe("submitImplicitly", () => {
       <test-control></test-control>
       <button type="submit" name="action" value="save">Save</button>
     `);
-    const button = form.querySelector("button");
+    const button = query(form, "button");
 
     submitImplicitly(control);
 
     expect(submits).toHaveLength(1);
-    expect(submits[0].submitter).toBe(button);
+    expect(submits[0]?.submitter).toBe(button);
   });
 
   it("uses the first submit button as the default", () => {
@@ -54,12 +51,12 @@ describe("submitImplicitly", () => {
       <input type="submit" id="first" />
       <button type="submit" id="second">Second</button>
     `);
-    const first = form.querySelector("#first");
+    const first = query(form, "#first");
 
     submitImplicitly(control);
 
     expect(submits).toHaveLength(1);
-    expect(submits[0].submitter).toBe(first);
+    expect(submits[0]?.submitter).toBe(first);
   });
 
   it("does nothing when the default button is disabled", () => {
@@ -83,11 +80,11 @@ describe("submitImplicitly", () => {
     submitImplicitly(control);
 
     expect(submits).toHaveLength(1);
-    expect(submits[0].submitter).toBe(null);
+    expect(submits[0]?.submitter).toBe(null);
   });
 
   it("does nothing without a form", () => {
-    const control = document.createElement("test-control");
+    const control = new TestControl();
     document.body.append(control);
 
     expect(() => submitImplicitly(control)).not.toThrow();

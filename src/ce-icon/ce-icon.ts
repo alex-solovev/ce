@@ -1,4 +1,4 @@
-import { getIcon, unwatchIconLibraries, watchIconLibraries } from "./icon-library.js";
+import { getIcon, unwatchIconLibraries, watchIconLibraries } from "./icon-library.ts";
 
 const styles = new CSSStyleSheet();
 styles.replaceSync(`
@@ -6,47 +6,56 @@ styles.replaceSync(`
   svg { display: block; width: 100%; height: 100%; }
 `);
 
+/**
+ * An SVG icon from a registered icon library.
+ *
+ * @attr name - Icon name within the library.
+ * @attr library - Library name. Defaults to "default".
+ * @attr label - Accessible label. Without one the icon is decorative.
+ * @csspart svg - The rendered SVG.
+ */
 export class CeIcon extends HTMLElement {
-  static observedAttributes = ["name", "library", "label"];
+  static observedAttributes: string[] = ["name", "library", "label"];
 
   #initialized = false;
 
-  /** @type {ShadowRoot | null} */
-  #root = null;
+  #root: ShadowRoot | null = null;
 
-  /** @type {ElementInternals} */
-  #internals;
+  #internals: ElementInternals;
 
   constructor() {
     super();
     this.#internals = this.attachInternals();
   }
 
-  get name() {
+  /** Reflects the `name` attribute. */
+  get name(): string {
     return this.getAttribute("name") ?? "";
   }
 
-  set name(value) {
+  set name(value: string) {
     this.setAttribute("name", value);
   }
 
-  get library() {
+  /** Reflects the `library` attribute. */
+  get library(): string {
     return this.getAttribute("library") ?? "default";
   }
 
-  set library(value) {
+  set library(value: string) {
     this.setAttribute("library", value);
   }
 
-  get label() {
+  /** Reflects the `label` attribute. */
+  get label(): string {
     return this.getAttribute("label") ?? "";
   }
 
-  set label(value) {
+  set label(value: string) {
     this.setAttribute("label", value);
   }
 
-  connectedCallback() {
+  connectedCallback(): void {
     if (!this.#initialized) {
       this.#setup();
       this.#initialized = true;
@@ -58,16 +67,11 @@ export class CeIcon extends HTMLElement {
     this.#updateLabel();
   }
 
-  disconnectedCallback() {
+  disconnectedCallback(): void {
     unwatchIconLibraries(this.#onLibraryRegistered);
   }
 
-  /**
-   * @param {string} name
-   * @param {string | null} oldValue
-   * @param {string | null} newValue
-   */
-  attributeChangedCallback(name, oldValue, newValue) {
+  attributeChangedCallback(name: string, oldValue: string | null, newValue: string | null): void {
     if (!this.#initialized) {
       return;
     }
@@ -92,8 +96,7 @@ export class CeIcon extends HTMLElement {
     this.#root.adoptedStyleSheets = [styles];
   }
 
-  /** @param {string} library */
-  #onLibraryRegistered = (library) => {
+  #onLibraryRegistered = (library: string) => {
     if (library !== this.library) {
       return;
     }
@@ -145,6 +148,12 @@ export class CeIcon extends HTMLElement {
     this.#internals.role = "img";
     this.#internals.ariaLabel = label;
     this.#internals.ariaHidden = null;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "ce-icon": CeIcon;
   }
 }
 

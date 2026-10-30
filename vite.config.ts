@@ -1,7 +1,7 @@
-import { defineConfig } from "vite-plus";
+import { defineConfig, type ViteUserConfig } from "vite-plus";
 import { playwright } from "vite-plus/test/browser-playwright";
 
-export default defineConfig({
+const config: ViteUserConfig = defineConfig({
   staged: {
     "*": "vp check --fix",
   },
@@ -12,7 +12,7 @@ export default defineConfig({
     options: { typeAware: true, typeCheck: true },
   },
   test: {
-    include: ["src/**/*.test.js"],
+    include: ["src/**/*.test.ts"],
     browser: {
       enabled: true,
       provider: playwright(),
@@ -21,3 +21,5 @@ export default defineConfig({
     },
   },
 });
+
+export default config;

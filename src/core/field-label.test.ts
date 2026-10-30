@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vite-plus/test";
-import { labelMarkup, setupFieldLabel, updateFieldLabel } from "./field-label.js";
+import { labelMarkup, setupFieldLabel, updateFieldLabel } from "./field-label.ts";
+import { query } from "./test-dom.ts";
 
 afterEach(() => {
   document.body.replaceChildren();
@@ -7,7 +8,7 @@ afterEach(() => {
 
 /**
  * A plain host with `labelMarkup` and an input in its shadow root.
- * @param {string} [hostHtml] Light DOM content of the host.
+ * @param hostHtml Light DOM content of the host.
  */
 function render(hostHtml = "") {
   const host = document.createElement("div");
@@ -18,19 +19,14 @@ function render(hostHtml = "") {
 
   document.body.append(host);
 
-  const label = root.querySelector("label");
-  const slot = root.querySelector("slot");
-  const control = root.querySelector("input");
-
-  if (!label || !slot || !control) {
-    throw new Error("render: shadow root is incomplete");
-  }
+  const label = query(root, "label");
+  const slot = query(root, "slot");
+  const control = query(root, "input");
 
   return { host, root, label, slot, control };
 }
 
-/** @param {HTMLSlotElement} slot */
-function nextSlotchange(slot) {
+function nextSlotchange(slot: HTMLSlotElement): Promise<Event> {
   return new Promise((resolve) => {
     slot.addEventListener("slotchange", resolve, { once: true });
   });
@@ -102,7 +98,7 @@ describe("updateFieldLabel", () => {
     const root = host.attachShadow({ mode: "open" });
     root.innerHTML = `<input />`;
 
-    const control = root.querySelector("input");
+    const control = query(root, "input");
 
     expect(() => updateFieldLabel(host, root, control)).toThrow(/labelMarkup/);
   });

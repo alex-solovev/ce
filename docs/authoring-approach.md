@@ -33,3 +33,13 @@ The cost of vanilla is verbosity: imperative updates and a few lifecycle guarant
 | Declarative re-render                                          | Small imperative update functions reading from one state source                        |
 
 Platform APIs such as `ElementInternals.states` (`:state(...)` selectors) work the same either way.
+
+## TypeScript
+
+Sources are TypeScript (`.ts`), with no hand-written `.d.ts` files.
+
+- **Type-only syntax** (`erasableSyntaxOnly`): no enums, namespaces or constructor parameter properties. Stripping the types leaves the plain JavaScript we'd have written anyway, so nothing extra ships.
+- **Explicit types on exports** (`isolatedDeclarations`): declarations can be generated per file, without whole-program inference.
+- Relative imports use the `.ts` extension.
+- Component docs (`@attr`, `@slot`, `@csspart`, `@fires`) live in JSDoc on the class.
+- Each component file adds its tag to `HTMLElementTagNameMap`, so `querySelector("ce-input")` is typed.

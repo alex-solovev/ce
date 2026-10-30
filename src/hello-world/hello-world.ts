@@ -6,24 +6,30 @@ template.innerHTML = `
   <span part="greeting"></span>
 `;
 
+/**
+ * Renders a greeting.
+ *
+ * @attr name - Who to greet. Defaults to "World".
+ * @csspart greeting - The greeting text.
+ */
 export class HelloWorld extends HTMLElement {
-  static observedAttributes = ["name"];
+  static observedAttributes: string[] = ["name"];
 
   #initialized = false;
 
-  /** @type {HTMLSpanElement | null} */
-  #greeting = null;
+  #greeting: HTMLSpanElement | null = null;
 
-  get name() {
+  /** Reflects the `name` attribute. */
+  get name(): string {
     return this.getAttribute("name") ?? "World";
   }
 
-  set name(value) {
+  set name(value: string) {
     // attributeChangedCallback reacts; don't call the handler here
     this.setAttribute("name", value);
   }
 
-  connectedCallback() {
+  connectedCallback(): void {
     if (!this.#initialized) {
       this.#setup();
       this.#initialized = true;
@@ -32,12 +38,7 @@ export class HelloWorld extends HTMLElement {
     this.#updateGreeting();
   }
 
-  /**
-   * @param {string} name
-   * @param {string | null} oldValue
-   * @param {string | null} newValue
-   */
-  attributeChangedCallback(name, oldValue, newValue) {
+  attributeChangedCallback(name: string, oldValue: string | null, newValue: string | null): void {
     if (!this.#initialized) {
       return;
     }
@@ -65,6 +66,12 @@ export class HelloWorld extends HTMLElement {
     }
 
     this.#greeting.textContent = `Hello, ${this.name}!`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "hello-world": HelloWorld;
   }
 }
 
