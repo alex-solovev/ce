@@ -8,13 +8,9 @@
     <script type="module" src="/src/ce-input/ce-input.ts"></script>
     <script type="module" src="/src/ce-icon/ce-icon.ts"></script>
     <script type="module" src="/src/ce-select/ce-select.ts"></script>
-    <style>
-      ce-input,
-      ce-select {
-        max-width: 100%;
-        width: fit-content;
-      }
-    </style>
+    <!-- Open Props: design tokens for the demo only. -->
+    <!-- <link rel="stylesheet" href="https://unpkg.com/open-props@1.7.4/open-props.min.css" /> -->
+    <!-- <link rel="stylesheet" href="/style.css" /> -->
   </head>
   <body>
     <p><hello-world></hello-world></p>
@@ -236,6 +232,12 @@
           circle: `<svg viewBox="0 0 10 10" fill="currentColor"><circle cx="5" cy="5" r="5" /></svg>`,
         });
       });
+    </script>
+
+    <script type="module">
+      if (!("anchorName" in document.documentElement.style)) {
+        import("https://unpkg.com/@oddbird/css-anchor-positioning");
+      }
     </script>
   </body>
 </html>

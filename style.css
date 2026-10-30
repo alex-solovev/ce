@@ -1,0 +1,210 @@
+/* Demo page styles. Open Props (linked in index.html) supplies the tokens;
+   it's only here for trying the components out, not a dependency. */
+
+:root {
+  color-scheme: light dark;
+
+  --surface: light-dark(var(--gray-0), var(--gray-11));
+  --surface-raised: light-dark(white, var(--gray-10));
+  --text: light-dark(var(--gray-9), var(--gray-1));
+  --text-muted: light-dark(var(--gray-6), var(--gray-5));
+  --border: light-dark(var(--gray-4), var(--gray-8));
+  --border-hover: light-dark(var(--gray-6), var(--gray-6));
+  --accent: light-dark(var(--indigo-7), var(--indigo-4));
+  --accent-soft: light-dark(var(--indigo-0), var(--indigo-11));
+  --focus-ring: 0 0 0 3px light-dark(var(--indigo-2), var(--indigo-9));
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: var(--size-7) var(--size-5);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-1);
+  line-height: var(--font-lineheight-3);
+}
+
+h2 {
+  margin-block: var(--size-8) var(--size-4);
+  font-size: var(--font-size-4);
+  font-weight: var(--font-weight-7);
+  letter-spacing: var(--font-letterspacing-0);
+}
+
+form p,
+fieldset {
+  margin-block: 0 var(--size-4);
+}
+
+fieldset {
+  display: grid;
+  gap: var(--size-4);
+  padding: var(--size-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-3);
+}
+
+legend {
+  padding-inline: var(--size-2);
+  color: var(--text-muted);
+  font-weight: var(--font-weight-6);
+}
+
+button {
+  padding: var(--size-2) var(--size-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2);
+  background: var(--surface-raised);
+  color: inherit;
+  font: inherit;
+  font-weight: var(--font-weight-6);
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: var(--border-hover);
+}
+
+button[type="submit"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: light-dark(white, var(--gray-12));
+}
+
+output {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-0);
+  word-break: break-all;
+}
+
+/* Components */
+
+ce-input,
+ce-select {
+  width: 100%;
+  max-width: 24rem;
+}
+
+ce-input::part(label),
+ce-select::part(label) {
+  margin-block-end: var(--size-1);
+  color: var(--text-muted);
+  font-size: var(--font-size-0);
+  font-weight: var(--font-weight-6);
+}
+
+ce-input::part(base),
+ce-select::part(base) {
+  gap: var(--size-2);
+  min-height: var(--size-8);
+  padding: var(--size-1) var(--size-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2);
+  background: var(--surface-raised);
+  color: var(--text);
+  transition:
+    border-color 0.15s var(--ease-2),
+    box-shadow 0.15s var(--ease-2);
+}
+
+ce-input::part(base):hover,
+ce-select::part(base):hover {
+  border-color: var(--border-hover);
+}
+
+ce-input::part(base):focus-within,
+ce-select::part(base):focus-visible,
+ce-select::part(base):has(:focus) {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+ce-input:disabled::part(base),
+ce-select:disabled::part(base) {
+  background: var(--surface);
+}
+
+ce-input::part(clear-button),
+ce-select::part(clear-button),
+ce-select::part(chevron) {
+  color: var(--text-muted);
+}
+
+ce-input::part(clear-button):hover,
+ce-select::part(clear-button):hover {
+  color: var(--text);
+}
+
+ce-select::part(chevron) {
+  transition: rotate 0.2s var(--ease-3);
+}
+
+/* Multiple: each selected value as a tag instead of a comma list. */
+ce-select[multiple]::part(selected-option) {
+  display: inline-block;
+  margin-inline-end: var(--size-1);
+  padding: 0 var(--size-2);
+  border: 1px solid light-dark(var(--indigo-2), var(--indigo-9));
+  border-radius: var(--radius-2);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--font-size-0);
+  font-weight: var(--font-weight-6);
+  line-height: var(--font-lineheight-4);
+}
+
+ce-select[multiple]::part(selected-option)::after {
+  content: none;
+}
+
+ce-select::part(listbox) {
+  margin-block: var(--size-1);
+  padding: var(--size-1);
+  border: 1px solid var(--border);
+  /* Nested radius: the options' radius plus the padding around them. */
+  border-radius: calc(var(--radius-2) + var(--size-1));
+  background: var(--surface-raised);
+  color: var(--text);
+  box-shadow: var(--shadow-4);
+}
+
+ce-select::part(no-results) {
+  padding: var(--size-2) var(--size-3);
+  color: var(--text-muted);
+}
+
+ce-option {
+  gap: var(--size-2);
+  padding: var(--size-2) var(--size-3);
+  border-radius: var(--radius-2);
+  cursor: pointer;
+}
+
+ce-option:state(highlighted) {
+  background: var(--accent-soft);
+  color: inherit;
+}
+
+ce-option:state(selected) {
+  color: var(--accent);
+  font-weight: var(--font-weight-6);
+}
+
+ce-option[disabled] {
+  cursor: default;
+}
+
+ce-option::part(description) {
+  color: var(--text-muted);
+  font-weight: var(--font-weight-4);
+  opacity: 1;
+}
