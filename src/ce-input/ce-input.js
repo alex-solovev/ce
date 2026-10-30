@@ -1,3 +1,4 @@
+import "../ce-icon/ce-icon.js";
 import { FormControl } from "../core/form-control.js";
 import { submitImplicitly } from "../core/implicit-submit.js";
 
@@ -5,18 +6,68 @@ const template = document.createElement("template");
 template.innerHTML = `
   <style>
     :host { display: inline-block; }
-    input { box-sizing: border-box; width: 100%; font: inherit; }
+
+    [part="base"] {
+      display: flex;
+      align-items: center;
+      gap: 0.25em;
+      box-sizing: border-box;
+      width: 100%;
+      padding: 0.125em 0.25em;
+      border: 1px solid #767676;
+      border-radius: 2px;
+      background: Field;
+      color: FieldText;
+      cursor: text;
+    }
+
+    [part="base"]:focus-within { outline: 2px solid AccentColor; outline-offset: 1px; }
+
+    :host(:disabled) [part="base"] { opacity: 0.5; cursor: default; }
+
+    input {
+      flex: 1;
+      min-width: 0;
+      padding: 0;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+    }
+
+    [part="clear-button"] {
+      display: flex;
+      padding: 0;
+      border: 0;
+      background: none;
+      color: inherit;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    [part="clear-button"][hidden] { display: none; }
   </style>
-  <input part="input" />
+  <div part="base">
+    <slot name="start"></slot>
+    <input part="input" />
+    <button part="clear-button" type="button" tabindex="-1" aria-label="Clear" hidden>
+      <slot name="clear-icon"><ce-icon name="xmark"></ce-icon></slot>
+    </button>
+    <slot name="end"></slot>
+  </div>
 `;
 
 export class CeInput extends FormControl {
-  static observedAttributes = ["value", "placeholder"];
+  static observedAttributes = ["value", "placeholder", "with-clear"];
 
   #initialized = false;
 
   /** @type {HTMLInputElement | null} */
   #input = null;
+
+  /** @type {HTMLButtonElement | null} */
+  #clearButton = null;
 
   /**
    * Value set by the user or the `value` property. While null, the `value`
@@ -50,6 +101,14 @@ export class CeInput extends FormControl {
 
   set placeholder(value) {
     this.setAttribute("placeholder", value);
+  }
+
+  get withClear() {
+    return this.hasAttribute("with-clear");
+  }
+
+  set withClear(value) {
+    this.toggleAttribute("with-clear", Boolean(value));
   }
 
   connectedCallback() {
@@ -86,6 +145,11 @@ export class CeInput extends FormControl {
       this.#updatePlaceholder();
       return;
     }
+
+    if (name === "with-clear") {
+      this.#updateClearButton();
+      return;
+    }
   }
 
   formDisabledCallback() {
@@ -112,8 +176,9 @@ export class CeInput extends FormControl {
     root.append(template.content.cloneNode(true));
 
     const input = root.querySelector("input");
+    const clearButton = root.querySelector("button");
 
-    if (!input) {
+    if (!input || !clearButton) {
       return;
     }
 
@@ -121,7 +186,11 @@ export class CeInput extends FormControl {
     input.addEventListener("change", this.#onChange);
     input.addEventListener("keydown", this.#onKeydown);
 
+    clearButton.addEventListener("mousedown", this.#onClearMousedown);
+    clearButton.addEventListener("click", this.#onClearClick);
+
     this.#input = input;
+    this.#clearButton = clearButton;
   }
 
   #onInput = () => {
@@ -156,10 +225,27 @@ export class CeInput extends FormControl {
     submitImplicitly(this);
   };
 
+  /** @param {MouseEvent} event */
+  #onClearMousedown = (event) => {
+    // Keep focus in the input instead of moving it to the button.
+    event.preventDefault();
+  };
+
+  #onClearClick = () => {
+    this.#dirtyValue = "";
+    this.#updateValue();
+
+    this.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true }));
+    this.dispatchEvent(new Event("change", { bubbles: true }));
+
+    this.#input?.focus();
+  };
+
   #updateValue() {
     const value = this.value;
 
     this.internals.setFormValue(value);
+    this.#updateClearButton();
 
     if (!this.#input) {
       return;
@@ -182,11 +268,24 @@ export class CeInput extends FormControl {
   }
 
   #updateDisabled() {
+    this.#updateClearButton();
+
     if (!this.#input) {
       return;
     }
 
     this.#input.disabled = this.matches(":disabled");
+  }
+
+  #updateClearButton() {
+    if (!this.#clearButton) {
+      return;
+    }
+
+    const hasValue = this.value !== "";
+    const disabled = this.matches(":disabled");
+
+    this.#clearButton.hidden = !this.withClear || !hasValue || disabled;
   }
 }
 

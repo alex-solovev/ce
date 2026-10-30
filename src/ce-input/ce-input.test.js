@@ -166,4 +166,99 @@ describe("ce-input", () => {
       expect(submitted).toBe(false);
     });
   });
+
+  describe("start and end slots", () => {
+    it("render inside the box", () => {
+      const form = renderForm(`
+        <ce-input name="query">
+          <ce-icon slot="start" name="magnifying-glass"></ce-icon>
+          <span slot="end">kg</span>
+        </ce-input>
+      `);
+      const input = form.querySelector("ce-input");
+      const base = input.shadowRoot?.querySelector("[part='base']");
+      const start = base?.querySelector("slot[name='start']");
+      const end = base?.querySelector("slot[name='end']");
+
+      expect(start?.assignedElements()).toEqual([form.querySelector("ce-icon")]);
+      expect(end?.assignedElements()).toEqual([form.querySelector("span")]);
+    });
+
+    it("focus the input when clicked", async () => {
+      const form = renderForm(`
+        <ce-input name="query">
+          <ce-icon slot="start" name="magnifying-glass"></ce-icon>
+        </ce-input>
+      `);
+      const input = form.querySelector("ce-input");
+
+      await userEvent.click(form.querySelector("ce-icon"));
+
+      expect(input.shadowRoot?.activeElement).toBe(innerInput(input));
+    });
+  });
+
+  describe("clear button", () => {
+    /** @param {Element} host */
+    function clearButton(host) {
+      const button = host.shadowRoot?.querySelector("[part='clear-button']");
+
+      if (!(button instanceof HTMLButtonElement)) {
+        throw new Error("ce-input has no clear button");
+      }
+
+      return button;
+    }
+
+    it("is hidden without with-clear", () => {
+      const form = renderForm(`<ce-input name="query" value="cats"></ce-input>`);
+
+      expect(clearButton(form.querySelector("ce-input")).hidden).toBe(true);
+    });
+
+    it("is shown only while there's a value", async () => {
+      const form = renderForm(`<ce-input name="query" with-clear></ce-input>`);
+      const input = form.querySelector("ce-input");
+
+      expect(clearButton(input).hidden).toBe(true);
+
+      await userEvent.click(innerInput(input));
+      await userEvent.keyboard("cats");
+
+      expect(clearButton(input).hidden).toBe(false);
+    });
+
+    it("is hidden when disabled", () => {
+      const form = renderForm(
+        `<ce-input name="query" value="cats" with-clear disabled></ce-input>`,
+      );
+
+      expect(clearButton(form.querySelector("ce-input")).hidden).toBe(true);
+    });
+
+    it("clears the value, fires input and change, and focuses the input", async () => {
+      const form = renderForm(`<ce-input name="query" value="cats" with-clear></ce-input>`);
+      const input = form.querySelector("ce-input");
+
+      /** @type {string[]} */
+      const events = [];
+
+      input.addEventListener("input", () => {
+        events.push("input");
+      });
+
+      input.addEventListener("change", () => {
+        events.push("change");
+      });
+
+      await userEvent.click(clearButton(input));
+
+      expect(input.value).toBe("");
+      expect(innerInput(input).value).toBe("");
+      expect(new FormData(form).get("query")).toBe("");
+      expect(events).toEqual(["input", "change"]);
+      expect(input.shadowRoot?.activeElement).toBe(innerInput(input));
+      expect(clearButton(input).hidden).toBe(true);
+    });
+  });
 });
