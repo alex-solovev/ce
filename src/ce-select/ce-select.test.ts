@@ -4,7 +4,7 @@ import { accessibleNodeDetails } from "../core/test-accessibility.ts";
 import type { AccessibleNode } from "../core/test-accessibility.ts";
 import { query, queryShadow } from "../core/test-dom.ts";
 import "./ce-select.ts";
-import type { CeOption } from "./ce-option.ts";
+import { CeOption } from "./ce-option.ts";
 import type { CeSelect } from "./ce-select.ts";
 
 afterEach(() => {
@@ -140,6 +140,29 @@ function accessibleNames(nodes: AccessibleNode[], role: string): string[] {
   }
 
   return result;
+}
+
+/** Records which options `setView` is called on. */
+function spyOnSetView() {
+  const spy = vi.spyOn(CeOption.prototype, "setView");
+
+  return {
+    /** Values of the options updated since the last call, in order. */
+    takeValues(): string[] {
+      const values: string[] = [];
+
+      for (const context of spy.mock.contexts) {
+        values.push((context as CeOption).value);
+      }
+
+      spy.mockClear();
+
+      return values;
+    },
+    restore(): void {
+      spy.mockRestore();
+    },
+  };
 }
 
 describe("ce-select", () => {
@@ -1165,6 +1188,107 @@ describe("ce-select", () => {
       await mutationsSettled();
 
       expect(accessibleNames(await accessibleNodeDetails(), "option")[0]).toBe("Green apple");
+    });
+  });
+  describe("rendering cost", () => {
+    it("updates only the old and new option when the highlight moves", async () => {
+      const { select } = render(`<ce-select name="item">${manyOptions(2000)}</ce-select>`);
+      const views = spyOnSetView();
+
+      await focusAndPress(select, "{ArrowDown}");
+      expect(views.takeValues()).toEqual(["v0"]);
+
+      await userEvent.keyboard("{ArrowDown}");
+      expect(views.takeValues()).toEqual(["v0", "v1"]);
+
+      await userEvent.keyboard("{End}");
+      expect(views.takeValues()).toEqual(["v1", "v1999"]);
+
+      await userEvent.hover(option(select, "v1998"));
+      expect(views.takeValues()).toEqual(["v1999", "v1998"]);
+
+      views.restore();
+    });
+
+    it("updates only the old and new selected option in single mode", async () => {
+      const { select } = render(`<ce-select name="item">${manyOptions(50)}</ce-select>`);
+
+      await focusAndPress(select, "{ArrowDown}{ArrowDown}");
+
+      const views = spyOnSetView();
+
+      // Selects v1; closing also clears its highlight.
+      await userEvent.keyboard("{Enter}");
+      expect(new Set(views.takeValues())).toEqual(new Set(["v1"]));
+
+      // Opens on v1, moves to v2, selects it.
+      await userEvent.keyboard("{Enter}{ArrowDown}");
+      views.takeValues();
+
+      await userEvent.keyboard("{Enter}");
+      expect(new Set(views.takeValues())).toEqual(new Set(["v1", "v2"]));
+
+      views.restore();
+    });
+
+    it("updates only the toggled option in multiple mode", async () => {
+      const { select } = render(`<ce-select name="item" multiple>${manyOptions(50)}</ce-select>`);
+
+      await focusAndPress(select, "{ArrowDown}");
+
+      const views = spyOnSetView();
+
+      await userEvent.keyboard("{Enter}");
+      expect(views.takeValues()).toEqual(["v0"]);
+
+      select.values = ["v0", "v7"];
+      expect(views.takeValues()).toEqual(["v7"]);
+
+      views.restore();
+    });
+
+    it("updates every option when multiple changes or the options change", async () => {
+      const { select } = render(`<ce-select name="item">${manyOptions(50)}</ce-select>`);
+      const views = spyOnSetView();
+
+      select.multiple = true;
+      expect(views.takeValues()).toHaveLength(50);
+
+      select.append(document.createElement("ce-option"));
+      await mutationsSettled();
+      expect(views.takeValues()).toHaveLength(51);
+
+      views.restore();
+    });
+
+    it("leaves duplicate elements alone while navigating", async () => {
+      const { select } = render(`
+        <ce-select name="letter">
+          <ce-option value="a">First A</ce-option>
+          <ce-option value="a">Second A</ce-option>
+          <ce-option value="b">B</ce-option>
+        </ce-select>
+      `);
+      const second = select.querySelectorAll("ce-option")[1];
+      const spy = vi.spyOn(CeOption.prototype, "setView");
+
+      await focusAndPress(select, "{ArrowDown}{ArrowDown}{ArrowUp}{Enter}");
+
+      expect(spy.mock.contexts).not.toContain(second);
+
+      spy.mockRestore();
+    });
+
+    it("looks up selectedOptions without searching the DOM", () => {
+      const { select } = render(`<ce-select name="item" multiple>${manyOptions(50)}</ce-select>`);
+      const querySelectorAll = vi.spyOn(select, "querySelectorAll");
+
+      select.values = ["v3", "v1"];
+
+      expect(selectedOptionValues(select)).toEqual(["v1", "v3"]);
+      expect(querySelectorAll).not.toHaveBeenCalled();
+
+      querySelectorAll.mockRestore();
     });
   });
 });

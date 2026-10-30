@@ -80,6 +80,18 @@ Checked by `checkInvariants(state)` after every action in tests.
 - Disabled options can't be selected by the user, but can be selected programmatically (like native).
 - A no-op action returns an empty change set and leaves the state untouched (so the component can skip rendering).
 
+### Performance
+
+Work stays proportional to what changed, so long lists (thousands of options) cost the same per keystroke as short ones.
+
+- `#elements`: value → first `ce-option`, rebuilt in the same pass that reads the option data. Lookups (active descendant, `selectedOptions`) never search the DOM.
+- The component remembers what the options show (`#renderedHighlight`, `#renderedSelection`, `#renderedMultiple`):
+  - Highlight move (arrow keys, hover, Home / End, type-ahead): `setView` on the old and new option only.
+  - Selection change: only options that were selected or deselected.
+  - Every option only when the options themselves change or `multiple` flips (check mark column).
+- Reducer actions are pure JS: highlight moves are one pass over enabled options; only actions that change what's visible re-check the navigation items.
+- Covered by tests that count `setView` calls, not by timing.
+
 ## Phases
 
 Each phase ends with tests passing and a demo update, ready for review.

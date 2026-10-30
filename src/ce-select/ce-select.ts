@@ -9,6 +9,7 @@ import {
 import { FormControl } from "../core/form-control.ts";
 import { createTypeaheadBuffer, navigationKey, pushTypeahead } from "../core/list-navigation.ts";
 import { CeOption } from "./ce-option.ts";
+import type { OptionView } from "./ce-option.ts";
 import { createState, displayText, formValues, isSelected, reduce } from "./select-state.ts";
 import type { Action, Field, Option, State } from "./select-state.ts";
 
@@ -124,6 +125,22 @@ export class CeSelect extends FormControl {
 
   #listbox: HTMLElement | null = null;
 
+  /**
+   * Option elements by value; the first one for duplicate values. Rebuilt
+   * whenever the options are read, so lookups never search the DOM.
+   */
+  #elements = new Map<string, CeOption>();
+
+  /**
+   * What the option elements currently show, so a change only touches the
+   * options it affects (a highlight move: two of them, however long the list).
+   */
+  #renderedHighlight: string | null = null;
+
+  #renderedSelection = new Set<string>();
+
+  #renderedMultiple = false;
+
   /** Reports option changes: added, removed, edited text or attributes. */
   #observer = new MutationObserver((records) => {
     this.#onMutations(records);
@@ -156,17 +173,10 @@ export class CeSelect extends FormControl {
   /** The selected `ce-option` elements in document order, like native `<select>`. */
   get selectedOptions(): CeOption[] {
     const result: CeOption[] = [];
-    const seen = new Set<string>();
 
-    for (const element of this.querySelectorAll("ce-option")) {
-      // Only the first of duplicate values counts.
-      if (seen.has(element.value)) {
-        continue;
-      }
-
-      seen.add(element.value);
-
-      if (isSelected(this.#state, element.value)) {
+    // The map holds the first element per value, in document order.
+    for (const [value, element] of this.#elements) {
+      if (isSelected(this.#state, value)) {
         result.push(element);
       }
     }
@@ -329,26 +339,33 @@ export class CeSelect extends FormControl {
   }
 
   #render(changes: Set<Field>) {
+    // When the options changed, #syncOptions renders every option itself.
+    const optionsChanged = changes.has("options");
+
     if (changes.has("selection")) {
       this.#renderSelection();
+    }
+
+    if (changes.has("selection") && !optionsChanged) {
+      this.#renderSelectionChange();
     }
 
     if (changes.has("open")) {
       this.#renderOpen();
     }
 
-    if (changes.has("options") || changes.has("selection") || changes.has("navigation")) {
-      this.#renderOptions();
-    }
-
-    if (changes.has("navigation") || changes.has("open")) {
-      this.#renderHighlight();
+    if (changes.has("navigation") && !optionsChanged) {
+      this.#renderHighlightChange();
     }
 
     if (changes.has("config")) {
       this.#renderDisabled();
       this.#renderMultiple();
-      this.#renderOptions();
+    }
+
+    // The check mark column changes on every option.
+    if (changes.has("config") && this.#renderedMultiple !== this.#state.config.multiple) {
+      this.#renderAllOptions();
     }
   }
 
@@ -368,41 +385,35 @@ export class CeSelect extends FormControl {
   }
 
   #syncOptions() {
-    this.#dispatch({ type: "OPTIONS_CHANGED", options: this.#readOptions() });
+    this.#dispatch({ type: "OPTIONS_CHANGED", options: this.#collectOptions() });
 
-    // New elements with the same data report no change, but still need
-    // their view.
-    this.#renderOptions();
+    // Always, even when the data didn't change: the elements may be new.
+    this.#renderAllOptions();
   }
 
-  #readOptions(): Option[] {
+  /** Reads the option data and rebuilds the value → element map in one pass. */
+  #collectOptions(): Option[] {
     const options: Option[] = [];
+    const elements = new Map<string, CeOption>();
 
     for (const element of this.querySelectorAll("ce-option")) {
+      const value = element.value;
+
       options.push({
-        value: element.value,
+        value,
         label: element.label,
         disabled: element.disabled,
         defaultSelected: element.defaultSelected,
       });
-    }
 
-    return options;
-  }
-
-  /** The element of an option value. With duplicate values, the first one. */
-  #optionElement(value: string | null): CeOption | null {
-    if (value === null) {
-      return null;
-    }
-
-    for (const element of this.querySelectorAll("ce-option")) {
-      if (element.value === value) {
-        return element;
+      if (!elements.has(value)) {
+        elements.set(value, element);
       }
     }
 
-    return null;
+    this.#elements = elements;
+
+    return options;
   }
 
   // Rendering
@@ -492,32 +503,96 @@ export class CeSelect extends FormControl {
     }
   }
 
-  #renderOptions() {
-    const seen = new Set<string>();
-    const highlighted = this.#state.navigation.highlighted;
-
+  /** Gives every option element its view. O(n): only when options or the mode change. */
+  #renderAllOptions() {
     for (const element of this.querySelectorAll("ce-option")) {
-      const value = element.value;
-
       // Later duplicates of a value can't be selected or highlighted.
-      const duplicate = seen.has(value);
-      seen.add(value);
+      if (this.#elements.get(element.value) !== element) {
+        element.setView(this.#plainView());
+        continue;
+      }
 
-      element.setView({
-        selected: !duplicate && isSelected(this.#state, value),
-        highlighted: !duplicate && highlighted === value,
-        filteredOut: false,
-        showCheck: this.#state.config.multiple,
-      });
+      element.setView(this.#viewFor(element.value));
+    }
+
+    this.#renderedHighlight = this.#state.navigation.highlighted;
+    this.#renderedSelection = new Set(formValues(this.#state));
+    this.#renderedMultiple = this.#state.config.multiple;
+
+    this.#renderActiveDescendant();
+  }
+
+  /** Updates only the previously and newly highlighted options. */
+  #renderHighlightChange() {
+    const previous = this.#renderedHighlight;
+    const next = this.#state.navigation.highlighted;
+
+    this.#renderedHighlight = next;
+
+    this.#renderOption(previous);
+    this.#renderOption(next);
+    this.#renderActiveDescendant();
+  }
+
+  /** Updates only the options that were selected or deselected. */
+  #renderSelectionChange() {
+    const previous = this.#renderedSelection;
+    const next = new Set(formValues(this.#state));
+
+    this.#renderedSelection = next;
+
+    for (const value of previous) {
+      if (!next.has(value)) {
+        this.#renderOption(value);
+      }
+    }
+
+    for (const value of next) {
+      if (!previous.has(value)) {
+        this.#renderOption(value);
+      }
     }
   }
 
-  #renderHighlight() {
+  #renderOption(value: string | null) {
+    if (value === null) {
+      return;
+    }
+
+    const element = this.#elements.get(value);
+
+    if (!element) {
+      return;
+    }
+
+    element.setView(this.#viewFor(value));
+  }
+
+  #viewFor(value: string): OptionView {
+    return {
+      selected: isSelected(this.#state, value),
+      highlighted: this.#state.navigation.highlighted === value,
+      filteredOut: false,
+      showCheck: this.#state.config.multiple,
+    };
+  }
+
+  #plainView(): OptionView {
+    return {
+      selected: false,
+      highlighted: false,
+      filteredOut: false,
+      showCheck: this.#state.config.multiple,
+    };
+  }
+
+  #renderActiveDescendant() {
     if (!this.#trigger || !this.#listbox) {
       return;
     }
 
-    const element = this.#optionElement(this.#state.navigation.highlighted);
+    const value = this.#state.navigation.highlighted;
+    const element = value === null ? null : (this.#elements.get(value) ?? null);
 
     this.#trigger.ariaActiveDescendantElement = element;
 
