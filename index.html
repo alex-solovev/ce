@@ -96,6 +96,14 @@
           <ce-option value="extra-cheese">Extra cheese, double portion, melted on top</ce-option>
         </ce-select>
       </p>
+      <p>
+        <ce-select
+          id="large"
+          name="large"
+          label="Large list (2,000 options)"
+          placeholder="Pick one"
+        ></ce-select>
+      </p>
       <fieldset id="group">
         <legend>Fieldset</legend>
         <ce-input name="city" label="City" value="London"></ce-input>
@@ -137,6 +145,34 @@
       Custom library
       <button type="button" id="register-shapes">Register "shapes"</button>
     </p>
+
+    <script type="module">
+      // Large list for performance testing: options are built in a fragment
+      // and appended at once, so the select sees one batch of mutations.
+      const large = document.querySelector("#large");
+      const options = document.createDocumentFragment();
+
+      for (let i = 1; i <= 2000; i++) {
+        const option = document.createElement("ce-option");
+        option.value = `item-${i}`;
+        option.textContent = `Item ${i}`;
+
+        if (i % 10 === 0) {
+          const description = document.createElement("span");
+          description.slot = "description";
+          description.textContent = `Every tenth item has a description (${i})`;
+          option.append(description);
+        }
+
+        if (i % 50 === 0) {
+          option.disabled = true;
+        }
+
+        options.append(option);
+      }
+
+      large.append(options);
+    </script>
 
     <script type="module">
       const form = document.querySelector("#demo");
