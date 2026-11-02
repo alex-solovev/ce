@@ -145,6 +145,32 @@ describe("selection", () => {
     expect(new FormData(form).has("fruit")).toBe(false);
   });
 
+  it("keeps the placeholder out of the combobox's value, as its description", () => {
+    const { host, context } = setup();
+    const { display } = context.refs;
+    host.placeholder = "Pick one";
+
+    render.selection(context);
+
+    expect(display.querySelector("[aria-hidden='true']")?.textContent).toBe("Pick one");
+    expect(display.ariaDescription).toBe("Pick one");
+
+    logic.setValues(context.state, ["date"]);
+    render.selection(context);
+
+    expect(display.querySelector("[aria-hidden='true']")).toBe(null);
+    expect(display.ariaDescription).toBe(null);
+  });
+
+  it("gives no placeholder description when searchable", () => {
+    const { host, context } = setup(fruits, { searchable: true, multiple: true });
+    host.placeholder = "Pick one";
+
+    render.selection(context);
+
+    expect(context.refs.display.ariaDescription).toBe(null);
+  });
+
   it("shows one span per selected label, with the title and form value", () => {
     const { form, host, context } = setup(fruits, { multiple: true });
 
@@ -228,14 +254,14 @@ describe("open", () => {
     render.open(context);
 
     expect(context.refs.listbox.matches(":popover-open")).toBe(true);
-    expect(context.refs.box.ariaExpanded).toBe("true");
+    expect(context.refs.display.ariaExpanded).toBe("true");
     expect(host.matches(":state(open)")).toBe(true);
 
     logic.closeList(context.state);
     render.open(context);
 
     expect(context.refs.listbox.matches(":popover-open")).toBe(false);
-    expect(context.refs.box.ariaExpanded).toBe("false");
+    expect(context.refs.display.ariaExpanded).toBe("false");
     expect(host.matches(":state(open)")).toBe(false);
   });
 });
@@ -284,7 +310,7 @@ describe("highlightChange", () => {
 
     expect(views.values()).toEqual(["apple", "banana"]);
     expect(element(host, "banana").matches(":state(highlighted)")).toBe(true);
-    expect(context.refs.box.ariaActiveDescendantElement).toBe(element(host, "banana"));
+    expect(context.refs.display.ariaActiveDescendantElement).toBe(element(host, "banana"));
 
     views.restore();
   });
@@ -425,11 +451,11 @@ describe("activeDescendant", () => {
 
     logic.openList(context.state, "last");
     render.activeDescendant(context);
-    expect(context.refs.box.ariaActiveDescendantElement).toBe(element(host, "date"));
+    expect(context.refs.display.ariaActiveDescendantElement).toBe(element(host, "date"));
 
     logic.closeList(context.state);
     render.activeDescendant(context);
-    expect(context.refs.box.ariaActiveDescendantElement).toBe(null);
+    expect(context.refs.display.ariaActiveDescendantElement).toBe(null);
   });
 
   it("scrolls the list on the next animation frame, not right away", async () => {
@@ -463,26 +489,34 @@ describe("activeDescendant", () => {
 });
 
 describe("disabled", () => {
-  it("removes the box from the tab order and disables the input", () => {
+  it("removes the display from the tab order and disables the input", () => {
     const { context } = setup();
 
     logic.setConfig(context.state, { disabled: true });
     render.disabled(context);
 
-    expect(context.refs.box.hasAttribute("tabindex")).toBe(false);
-    expect(context.refs.box.ariaDisabled).toBe("true");
+    expect(context.refs.display.hasAttribute("tabindex")).toBe(false);
+    expect(context.refs.display.ariaDisabled).toBe("true");
     expect(context.refs.input.disabled).toBe(true);
 
     logic.setConfig(context.state, { disabled: false });
     render.disabled(context);
 
-    expect(context.refs.box.tabIndex).toBe(0);
-    expect(context.refs.box.ariaDisabled).toBe(null);
+    expect(context.refs.display.tabIndex).toBe(0);
+    expect(context.refs.display.ariaDisabled).toBe(null);
     expect(context.refs.input.disabled).toBe(false);
   });
 
-  it("keeps the box out of the tab order when searchable", () => {
+  it("keeps the display out of the tab order when searchable", () => {
     const { context } = setup(fruits, { searchable: true });
+
+    render.disabled(context);
+
+    expect(context.refs.display.hasAttribute("tabindex")).toBe(false);
+  });
+
+  it("never puts the box in the tab order", () => {
+    const { context } = setup();
 
     render.disabled(context);
 
@@ -544,16 +578,16 @@ describe("multiple", () => {
 });
 
 describe("triggerRole", () => {
-  it("moves the combobox role between the box and the input", () => {
+  it("moves the combobox role between the display and the input", () => {
     const { host, context } = setup();
-    const { box, input } = context.refs;
+    const { box, display, input } = context.refs;
 
     render.triggerRole(context);
 
-    expect(box.getAttribute("role")).toBe("combobox");
-    expect(box.getAttribute("aria-controls")).toBe("listbox");
+    expect(display.getAttribute("role")).toBe("combobox");
+    expect(display.getAttribute("aria-controls")).toBe("listbox");
     expect(input.hidden).toBe(true);
-    expect(render.trigger(context)).toBe(box);
+    expect(render.trigger(context)).toBe(display);
 
     logic.setConfig(context.state, { searchable: true });
     render.triggerRole(context);
@@ -561,10 +595,14 @@ describe("triggerRole", () => {
     expect(input.getAttribute("role")).toBe("combobox");
     expect(input.ariaAutoComplete).toBe("list");
     expect(input.hidden).toBe(false);
-    expect(box.hasAttribute("role")).toBe(false);
-    expect(box.hasAttribute("aria-controls")).toBe(false);
+    expect(display.hasAttribute("role")).toBe(false);
+    expect(display.hasAttribute("aria-controls")).toBe(false);
     expect(host.matches(":state(searchable)")).toBe(true);
     expect(render.trigger(context)).toBe(input);
+
+    // The box is only the frame: the clear button inside it stays out of
+    // the combobox's value.
+    expect(box.hasAttribute("role")).toBe(false);
   });
 });
 
@@ -577,7 +615,30 @@ describe("label", () => {
 
     const label = context.root.querySelector("[part='label']");
 
-    expect(context.refs.box.ariaLabelledByElements).toEqual([label]);
+    expect(context.refs.display.ariaLabelledByElements).toEqual([label]);
     expect(context.refs.listbox.ariaLabelledByElements).toEqual([label]);
+  });
+
+  it('names the clear button "Clear" plus the label, or just "Clear"', () => {
+    const { host, context } = setup();
+    const { clearButton } = context.refs;
+
+    render.label(context);
+
+    expect(clearButton.ariaLabelledByElements).toBe(null);
+    expect(clearButton.textContent?.trim()).toBe("Clear");
+
+    host.setAttribute("label", "Fruit");
+    render.label(context);
+
+    const [clearText, label] = clearButton.ariaLabelledByElements ?? [];
+
+    expect(clearText?.textContent).toBe("Clear");
+    expect(label).toBe(context.root.querySelector("[part='label']"));
+
+    host.removeAttribute("label");
+    render.label(context);
+
+    expect(clearButton.ariaLabelledByElements).toBe(null);
   });
 });

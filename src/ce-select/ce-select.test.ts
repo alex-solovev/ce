@@ -55,6 +55,10 @@ function option(select: CeSelect, value: string): CeOption {
 }
 
 function trigger(select: CeSelect): HTMLElement {
+  return queryShadow<HTMLElement>(select, "[part='display']");
+}
+
+function box(select: CeSelect): HTMLElement {
   return queryShadow<HTMLElement>(select, "[part='base']");
 }
 
@@ -437,6 +441,22 @@ describe("ce-select", () => {
       expect(isOpen(select)).toBe(false);
     });
 
+    // The combobox is only the display; the rest of the box is frame.
+    it("pressing the box's padding or the chevron opens and focuses the combobox", () => {
+      const { select } = render(`<ce-select name="fruit">${fruits}</ce-select>`);
+
+      pointer(box(select), "pointerdown");
+      expect(isOpen(select)).toBe(true);
+      expect(select.shadowRoot?.activeElement).toBe(trigger(select));
+
+      pointer(box(select), "pointerdown");
+      expect(isOpen(select)).toBe(false);
+
+      pointer(queryShadow(select, "[part='chevron']"), "pointerdown");
+      expect(isOpen(select)).toBe(true);
+      expect(select.shadowRoot?.activeElement).toBe(trigger(select));
+    });
+
     it("touch toggles on release, so a swipe starting on the field can scroll the page", () => {
       const { select } = render(`<ce-select name="fruit">${fruits}</ce-select>`);
 
@@ -783,7 +803,66 @@ describe("ce-select", () => {
         }
 
         // No icons (chevron, check marks), no "No results" row.
-        expect(roles).toEqual(["combobox:Fruit", "listbox:Fruit", "button:Clear"]);
+        // The clear button right after the combobox, outside it.
+        expect(roles).toEqual(["combobox:Fruit", "button:Clear Fruit", "listbox:Fruit"]);
+      });
+
+      it('names the clear button just "Clear" without a label', async () => {
+        const { select } = render(`<ce-select name="fruit" with-clear>${fruits}</ce-select>`);
+        select.value = "date";
+
+        expect(withRole(await accessibleNodeDetails(), "button")).toMatchObject([
+          { name: "Clear" },
+        ]);
+      });
+
+      it("follows label changes in the clear button's name", async () => {
+        const { select } = render(
+          `<ce-select name="fruit" label="Fruit" with-clear>${fruits}</ce-select>`,
+        );
+        select.value = "date";
+        select.setAttribute("label", "Snack");
+
+        expect(withRole(await accessibleNodeDetails(), "button")).toMatchObject([
+          { name: "Clear Snack" },
+        ]);
+      });
+
+      // Screen readers activate buttons with a plain click, no pointer events.
+      it("clears on a screen reader's click and returns focus to the combobox", async () => {
+        const { select, events } = render(
+          `<ce-select name="fruit" label="Fruit" with-clear>${fruits}</ce-select>`,
+        );
+        select.value = "date";
+
+        queryShadow<HTMLButtonElement>(select, "[part='clear-button']").click();
+
+        expect(select.value).toBe("");
+        expect(events).toEqual(["input", "change"]);
+        expect(select.shadowRoot?.activeElement).toBe(trigger(select));
+
+        const [combobox] = withRole(await accessibleNodeDetails(), "combobox");
+
+        expect(combobox).toMatchObject({ value: "", focused: true });
+        expect(withRole(await accessibleNodeDetails(), "button")).toEqual([]);
+      });
+
+      it("with-clear: the value is only the selected labels", async () => {
+        const { select } = render(
+          `<ce-select name="fruit" label="Fruit" with-clear>${fruits}</ce-select>`,
+        );
+        select.value = "date";
+
+        expect(withRole(await accessibleNodeDetails(), "combobox")).toMatchObject([
+          { value: "Date" },
+        ]);
+
+        select.multiple = true;
+        select.values = ["banana", "date"];
+
+        expect(withRole(await accessibleNodeDetails(), "combobox")).toMatchObject([
+          { value: "Banana, Date" },
+        ]);
       });
     });
 

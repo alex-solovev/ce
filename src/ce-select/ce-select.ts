@@ -32,8 +32,8 @@ export type SearchEventDetail = {
  * @slot label - Rich label content. Overrides the `label` attribute.
  * @slot clear-icon - Replaces the clear button's default icon.
  * @csspart label - The label.
- * @csspart base - The trigger box.
- * @csspart display - The selected options' labels, or the placeholder.
+ * @csspart base - The box around the display, input and buttons. Its focus ring: `:has(:focus-visible)` inside, `ce-select:focus-within::part(base)` outside.
+ * @csspart display - The selected options' labels, or the placeholder. The combobox when not searchable.
  * @csspart selected-option - One selected option's label, with its value in `data-value`.
  * @csspart input - The search input (searchable only).
  * @csspart clear-button - The clear button.
@@ -292,7 +292,8 @@ export class CeSelect extends FormControl {
     const context = render.createContext(this, this.internals, this.#state);
     const { box, input, clearButton, listbox } = context.refs;
 
-    // On the box only: the input is inside it, so its events bubble here.
+    // On the box only: the display and the input are inside it, so their
+    // events bubble here.
     box.addEventListener("keydown", this.#onKeydown);
     box.addEventListener("focusout", this.#onFocusout);
     box.addEventListener("pointerdown", this.#onBoxPointerdown);
@@ -384,7 +385,7 @@ export class CeSelect extends FormControl {
   }
 
   /**
-   * Gives the combobox role to the input (searchable) or the box, and
+   * Gives the combobox role to the input (searchable) or the display, and
    * redraws what depends on which one it is.
    */
   #switchTrigger() {

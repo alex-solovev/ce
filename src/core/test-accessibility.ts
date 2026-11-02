@@ -35,6 +35,9 @@ type RawProperty = {
 };
 
 type RawNode = {
+  nodeId: string;
+  parentId?: string;
+  childIds?: string[];
   ignored: boolean;
   backendDOMNodeId?: number;
   role?: { value?: unknown };
@@ -56,7 +59,7 @@ export async function accessibleNodeDetails(): Promise<AccessibleNode[]> {
   }
 
   const response = await cdp().send("Accessibility.getFullAXTree", { frameId: frame.id });
-  const nodes = response.nodes as RawNode[];
+  const nodes = inPageOrder(response.nodes as RawNode[]);
 
   // Relations point at DOM nodes; first learn what each one is announced as.
   const labels = new Map<number, string>();
@@ -142,6 +145,53 @@ export async function accessibleNodeDetails(): Promise<AccessibleNode[]> {
     }
 
     result.push(details);
+  }
+
+  return result;
+}
+
+/**
+ * The nodes depth first, the order a screen reader moves through them. CDP
+ * lists them level by level, so a deeply nested node would come after
+ * shallower ones that follow it on the page.
+ */
+function inPageOrder(nodes: RawNode[]): RawNode[] {
+  const byId = new Map<string, RawNode>();
+  const stack: RawNode[] = [];
+
+  for (const node of nodes) {
+    byId.set(node.nodeId, node);
+  }
+
+  // Roots last to first, so the first one comes off the stack first.
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    const node = nodes[i];
+
+    if (node && node.parentId === undefined) {
+      stack.push(node);
+    }
+  }
+
+  const result: RawNode[] = [];
+
+  while (stack.length > 0) {
+    const node = stack.pop();
+
+    if (!node) {
+      break;
+    }
+
+    result.push(node);
+
+    const childIds = node.childIds ?? [];
+
+    for (let i = childIds.length - 1; i >= 0; i--) {
+      const child = byId.get(childIds[i] ?? "");
+
+      if (child) {
+        stack.push(child);
+      }
+    }
   }
 
   return result;

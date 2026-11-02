@@ -33,16 +33,20 @@ template.innerHTML = `
       user-select: none;
     }
 
-    [part="base"]:focus-visible,
-    [part="base"]:has([part="input"]:focus) {
+    /* The ring goes on the box, around the combobox and the buttons. */
+    [part="base"]:has(:focus-visible) {
       outline: 2px solid AccentColor;
       outline-offset: 1px;
     }
 
     :host(:disabled) [part="base"] { opacity: 0.5; }
 
+    /* At least a line high, so an empty one (no selection or placeholder)
+       is still there to press and is as tall as one with text. */
     [part="display"] {
       flex: 1;
+      min-height: 1lh;
+      outline: 0;
       min-width: 0;
       overflow: hidden;
       white-space: nowrap;
@@ -128,7 +132,8 @@ template.innerHTML = `
       autocapitalize="off"
       spellcheck="false"
     />
-    <button part="clear-button" type="button" tabindex="-1" aria-label="Clear" hidden>
+    <button part="clear-button" type="button" tabindex="-1" hidden>
+      <span class="visually-hidden">Clear</span>
       <slot name="clear-icon"><ce-icon name="xmark"></ce-icon></slot>
     </button>
     <ce-icon part="chevron" name="chevron-down"></ce-icon>
@@ -147,13 +152,22 @@ const ANNOUNCE_DELAY = 300;
 const TRIGGER_ATTRIBUTES = ["role", "aria-haspopup", "aria-controls", "aria-expanded"];
 
 export type SelectRefs = {
-  /** The trigger box: anchor for the popup, and the combobox when not searchable. */
+  /**
+   * The frame around the display, input and buttons, and the popup's anchor.
+   * Never the combobox: its text would include the clear button's name.
+   */
   box: HTMLElement;
+  /** The selected labels; the combobox when not searchable. */
   display: HTMLElement;
   /** The combobox when searchable. */
   input: HTMLInputElement;
-  /** `with-clear` only; not in the tab order (Delete / Backspace clear instead). */
+  /**
+   * `with-clear` only; right after the combobox, named "Clear" plus the
+   * label. Not in the tab order (Delete / Backspace clear instead).
+   */
   clearButton: HTMLButtonElement;
+  /** The clear button's "Clear" text, first in its name. */
+  clearText: HTMLElement;
   listbox: HTMLElement;
   noResults: HTMLElement;
   liveRegion: HTMLElement;
@@ -216,19 +230,20 @@ export function collectRefs(root: ShadowRoot): SelectRefs {
     display: requireElement(root, "[part='display']", HTMLElement),
     input: requireElement(root, "[part='input']", HTMLInputElement),
     clearButton: requireElement(root, "[part='clear-button']", HTMLButtonElement),
+    clearText: requireElement(root, "[part='clear-button'] .visually-hidden", HTMLElement),
     listbox: requireElement(root, "[part='listbox']", HTMLElement),
     noResults: requireElement(root, "[part='no-results']", HTMLElement),
     liveRegion: requireElement(root, "[aria-live]", HTMLElement),
   };
 }
 
-/** The focusable combobox element: the input when searchable, otherwise the box. */
+/** The focusable combobox element: the input when searchable, otherwise the display. */
 export function trigger(context: SelectContext): HTMLElement {
   if (context.state.config.searchable) {
     return context.refs.input;
   }
 
-  return context.refs.box;
+  return context.refs.display;
 }
 
 /**
@@ -271,18 +286,26 @@ export function selection(context: SelectContext): void {
   // Searchable single: the input shows the selection instead.
   refs.display.hidden = state.config.searchable && !state.config.multiple;
 
-  // The box's text is the combobox's value, so the placeholder is hidden
-  // from it and is the description instead, like an input's placeholder.
-  refs.display.ariaHidden = isBlank ? "true" : null;
-  refs.box.ariaDescription = isBlank && !state.config.searchable ? host.placeholder : null;
+  // The display's text is the combobox's value, so the placeholder is
+  // hidden from it and is the description instead, like an input's.
+  const hasPlaceholder = isBlank && !state.config.searchable;
+  refs.display.ariaDescription = hasPlaceholder ? host.placeholder : null;
 
   // Searchable multiple: the labels sit outside the input, so they describe it.
   const isDescribed = !isBlank && state.config.searchable && state.config.multiple;
   refs.input.ariaDescribedByElements = isDescribed ? [refs.display] : null;
 
   // Searchable: the placeholder is the input's.
+  if (isBlank && state.config.searchable) {
+    refs.display.replaceChildren();
+    return;
+  }
+
   if (isBlank) {
-    refs.display.textContent = state.config.searchable ? "" : host.placeholder;
+    const placeholder = document.createElement("span");
+    placeholder.ariaHidden = "true";
+    placeholder.textContent = host.placeholder;
+    refs.display.replaceChildren(placeholder);
     return;
   }
 
@@ -498,15 +521,15 @@ export function disabled(context: SelectContext): void {
   refs.input.disabled = isDisabled;
   trigger(context).ariaDisabled = isDisabled ? "true" : null;
 
-  // The input is focusable by itself. The box: no tabindex at all when
+  // The input is focusable by itself. The display: no tabindex at all when
   // disabled, not -1, because with delegatesFocus pressing anywhere in the
-  // component would still focus a tabindex="-1" box.
+  // component would still focus a tabindex="-1" display.
   if (state.config.searchable || isDisabled) {
-    refs.box.removeAttribute("tabindex");
+    refs.display.removeAttribute("tabindex");
     return;
   }
 
-  refs.box.tabIndex = 0;
+  refs.display.tabIndex = 0;
 }
 
 /** `with-clear`: shown while there's a selection or search text to clear. */
@@ -523,7 +546,7 @@ export function triggerRole(context: SelectContext): void {
   const { state, refs, internals } = context;
   const isSearchable = state.config.searchable;
   const current = trigger(context);
-  const other = isSearchable ? refs.box : refs.input;
+  const other = isSearchable ? refs.display : refs.input;
 
   for (const name of TRIGGER_ATTRIBUTES) {
     other.removeAttribute(name);
@@ -547,12 +570,20 @@ export function triggerRole(context: SelectContext): void {
   setState(internals, "searchable", isSearchable);
 }
 
-/** Names the combobox and the listbox by the label. */
+/**
+ * Names the combobox and the listbox by the label, and the clear button
+ * "Clear" plus the label. Without a label the button's text, "Clear", names it.
+ */
 export function label(context: SelectContext): void {
+  const { refs } = context;
   const current = trigger(context);
 
   updateFieldLabel(context.host, context.root, current);
-  context.refs.listbox.ariaLabelledByElements = current.ariaLabelledByElements;
+
+  const labelledBy = current.ariaLabelledByElements;
+
+  refs.listbox.ariaLabelledByElements = labelledBy;
+  refs.clearButton.ariaLabelledByElements = labelledBy ? [refs.clearText, ...labelledBy] : null;
 }
 
 function option(context: SelectContext, value: string | null): void {

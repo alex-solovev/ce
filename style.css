@@ -121,8 +121,7 @@ ce-select::part(base):hover {
 }
 
 ce-input::part(base):focus-within,
-ce-select::part(base):focus-visible,
-ce-select::part(base):has(:focus) {
+ce-select:focus-within::part(base) {
   border-color: var(--accent);
   outline: none;
   box-shadow: var(--focus-ring);

@@ -69,6 +69,23 @@ describe("accessibleNodeDetails", () => {
     });
   });
 
+  // CDP lists nodes level by level: a deeper node would come after a
+  // shallower one that follows it on the page.
+  it("lists nodes in page order", async () => {
+    document.body.innerHTML = `
+      <div><p><button type="button">First</button></p></div>
+      <button type="button">Second</button>
+    `;
+
+    const names: string[] = [];
+
+    for (const node of withRole(await accessibleNodeDetails(), "button")) {
+      names.push(node.name);
+    }
+
+    expect(names).toEqual(["First", "Second"]);
+  });
+
   it("reads collapsed and live region politeness", async () => {
     document.body.innerHTML = `
       <button type="button" aria-expanded="false">Menu</button>
