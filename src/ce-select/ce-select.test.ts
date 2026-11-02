@@ -634,6 +634,39 @@ describe("ce-select", () => {
         expect(combobox).toMatchObject({ name: "Fruit", value: "Date", expanded: false });
       });
 
+      it("open: the active option follows the highlight, by key and by pointer", async () => {
+        const { select } = render(`<ce-select name="fruit" label="Fruit">${fruits}</ce-select>`);
+        select.value = "apple";
+
+        await focusAndPress(select, "{ArrowDown}");
+        expect(withRole(await accessibleNodeDetails(), "combobox")).toMatchObject([
+          { activeDescendant: "option:Apple" },
+        ]);
+
+        await userEvent.keyboard("{ArrowDown}");
+        expect(withRole(await accessibleNodeDetails(), "combobox")).toMatchObject([
+          { activeDescendant: "option:Banana" },
+        ]);
+
+        pointer(option(select, "date"), "pointermove");
+        expect(withRole(await accessibleNodeDetails(), "combobox")).toMatchObject([
+          { activeDescendant: "option:Date" },
+        ]);
+      });
+
+      it("searchable: the active option follows the highlight", async () => {
+        const { select } = render(
+          `<ce-select name="fruit" label="Fruit" searchable>${fruits}</ce-select>`,
+        );
+        select.value = "apple";
+        searchInput(select).focus();
+
+        await userEvent.keyboard("{ArrowDown}{ArrowDown}");
+        expect(withRole(await accessibleNodeDetails(), "combobox")).toMatchObject([
+          { activeDescendant: "option:Banana" },
+        ]);
+      });
+
       it("open: expanded, controlling the listbox, with the highlighted option active", async () => {
         const { select } = render(`<ce-select name="fruit" label="Fruit">${fruits}</ce-select>`);
         select.value = "banana";
