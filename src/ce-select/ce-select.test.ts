@@ -845,11 +845,8 @@ describe("ce-select", () => {
       });
     });
 
-    // Found by the tests above; `it.fails` until fixed, so the suite stays green
-    // and a fix shows up as a failure to flip to `it`.
-    describe("known gaps", () => {
-      // The placeholder text sits in the box, so it's read as the value.
-      it.fails("closed and empty: no value, not the placeholder", async () => {
+    describe("announcing the selection", () => {
+      it("closed and empty: no value, the placeholder as the description", async () => {
         const { select } = render(
           `<ce-select name="fruit" label="Fruit" placeholder="Pick one">${fruits}</ce-select>`,
         );
@@ -857,12 +854,21 @@ describe("ce-select", () => {
 
         const [combobox] = withRole(await accessibleNodeDetails(), "combobox");
 
-        expect(combobox?.value).toBe("");
+        expect(combobox).toMatchObject({ value: "", description: "Pick one" });
       });
 
-      // With focus in the input, the selected values (shown before it) aren't
-      // tied to the combobox, so a screen reader doesn't hear the selection.
-      it.fails("searchable multiple: the selection is announced with the combobox", async () => {
+      it("drops the placeholder description once something is selected", async () => {
+        const { select } = render(
+          `<ce-select name="fruit" label="Fruit" placeholder="Pick one">${fruits}</ce-select>`,
+        );
+        select.value = "date";
+
+        const [combobox] = withRole(await accessibleNodeDetails(), "combobox");
+
+        expect(combobox).toMatchObject({ value: "Date", description: "" });
+      });
+
+      it("searchable multiple: the selection is the combobox's description", async () => {
         const { select } = render(
           `<ce-select name="fruit" label="Fruit" searchable multiple>${fruits}</ce-select>`,
         );
@@ -870,10 +876,37 @@ describe("ce-select", () => {
         searchInput(select).focus();
 
         const [combobox] = withRole(await accessibleNodeDetails(), "combobox");
-        const announced = `${combobox?.value ?? ""} ${combobox?.description ?? ""}`;
 
-        expect(announced).toContain("Banana");
-        expect(announced).toContain("Date");
+        expect(combobox?.description).toContain("Banana");
+        expect(combobox?.description).toContain("Date");
+      });
+
+      it("searchable multiple: no description while nothing is selected", async () => {
+        const { select } = render(
+          `<ce-select name="fruit" label="Fruit" searchable multiple>${fruits}</ce-select>`,
+        );
+        select.values = ["banana"];
+        select.values = [];
+
+        const [combobox] = withRole(await accessibleNodeDetails(), "combobox");
+
+        expect(combobox?.description).toBe("");
+      });
+
+      it("searchable single and non-searchable: no selection description", async () => {
+        const { select } = render(
+          `<ce-select name="fruit" label="Fruit" searchable>${fruits}</ce-select>`,
+        );
+        select.value = "date";
+
+        expect(searchInput(select).ariaDescribedByElements).toBeNull();
+
+        select.searchable = false;
+        select.multiple = true;
+        select.values = ["apple", "date"];
+
+        expect(searchInput(select).ariaDescribedByElements).toBeNull();
+        expect(trigger(select).ariaDescribedByElements).toBeNull();
       });
     });
   });
@@ -1120,6 +1153,33 @@ describe("ce-select", () => {
   });
 
   describe("lifecycle and attributes", () => {
+    // Setting innerHTML on a connected parent connects the select before its
+    // options are upgraded; errors in connectedCallback are only reported.
+    it("works when connected before its options are upgraded", async () => {
+      const container = document.createElement("div");
+      const errors: unknown[] = [];
+      const onError = (event: ErrorEvent) => {
+        errors.push(event.error);
+        event.stopImmediatePropagation();
+        event.preventDefault();
+      };
+
+      document.body.append(container);
+      window.addEventListener("error", onError, { capture: true });
+      container.innerHTML = `<ce-select name="fruit">${fruits.replace(
+        `value="date"`,
+        `value="date" selected`,
+      )}</ce-select>`;
+      window.removeEventListener("error", onError, { capture: true });
+
+      const select = query<CeSelect>(container, "ce-select");
+
+      expect(errors).toEqual([]);
+      expect(select.value).toBe("date");
+      expect(display(select)).toBe("Date");
+      expect(option(select, "date").matches(":state(selected)")).toBe(true);
+    });
+
     it("closes and stops listening outside when removed while open", async () => {
       const { select } = render(`<ce-select name="fruit">${fruits}</ce-select>`);
       const removeListener = vi.spyOn(document, "removeEventListener");

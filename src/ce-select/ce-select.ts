@@ -156,6 +156,10 @@ export class CeSelect extends FormControl {
   }
 
   connectedCallback(): void {
+    // Inserted with its options in one go (innerHTML on a connected parent),
+    // the select connects before they're upgraded: upgrade them now.
+    customElements.upgrade(this);
+
     if (!this.#context) {
       this.#setup();
     }

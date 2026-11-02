@@ -271,6 +271,15 @@ export function selection(context: SelectContext): void {
   // Searchable single: the input shows the selection instead.
   refs.display.hidden = state.config.searchable && !state.config.multiple;
 
+  // The box's text is the combobox's value, so the placeholder is hidden
+  // from it and is the description instead, like an input's placeholder.
+  refs.display.ariaHidden = isBlank ? "true" : null;
+  refs.box.ariaDescription = isBlank && !state.config.searchable ? host.placeholder : null;
+
+  // Searchable multiple: the labels sit outside the input, so they describe it.
+  const isDescribed = !isBlank && state.config.searchable && state.config.multiple;
+  refs.input.ariaDescribedByElements = isDescribed ? [refs.display] : null;
+
   // Searchable: the placeholder is the input's.
   if (isBlank) {
     refs.display.textContent = state.config.searchable ? "" : host.placeholder;
