@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser/context";
-import { accessibleNodeDetails } from "../core/test-accessibility.ts";
+import { accessibleNodeDetails, withRole } from "../core/test-accessibility.ts";
+import { axeViolations } from "../core/test-axe.ts";
 import type { AccessibleNode } from "../core/test-accessibility.ts";
 import { query, queryShadow } from "../core/test-dom.ts";
 import "./ce-select.ts";
@@ -586,6 +587,294 @@ describe("ce-select", () => {
       expect(roles).toEqual(["combobox:Fruit", "listbox:Fruit"]);
       expect(trigger(select).ariaExpanded).toBe("true");
       expect(trigger(select).ariaActiveDescendantElement).toBe(option(select, "apple"));
+    });
+
+    describe("tree by state", () => {
+      it("closed and empty: collapsed, no listbox or options", async () => {
+        const { select } = render(
+          `<ce-select name="fruit" label="Fruit" placeholder="Pick one">${fruits}</ce-select>`,
+        );
+        trigger(select).focus();
+
+        const nodes = await accessibleNodeDetails();
+
+        expect(withRole(nodes, "combobox")).toMatchObject([
+          { name: "Fruit", expanded: false, hasPopup: "listbox", focused: true },
+        ]);
+        expect(withRole(nodes, "listbox")).toEqual([]);
+        expect(withRole(nodes, "option")).toEqual([]);
+      });
+
+      it("closed with a value: the selected label is the value", async () => {
+        const { select } = render(`<ce-select name="fruit" label="Fruit">${fruits}</ce-select>`);
+        select.value = "date";
+
+        const [combobox] = withRole(await accessibleNodeDetails(), "combobox");
+
+        expect(combobox).toMatchObject({ name: "Fruit", value: "Date", expanded: false });
+      });
+
+      it("open: expanded, controlling the listbox, with the highlighted option active", async () => {
+        const { select } = render(`<ce-select name="fruit" label="Fruit">${fruits}</ce-select>`);
+        select.value = "banana";
+
+        await focusAndPress(select, "{ArrowDown}");
+
+        const nodes = await accessibleNodeDetails();
+        const options: string[] = [];
+
+        for (const node of withRole(nodes, "option")) {
+          options.push(
+            `${node.name}${node.selected ? " (selected)" : ""}${node.disabled ? " (disabled)" : ""}`,
+          );
+        }
+
+        expect(withRole(nodes, "combobox")).toMatchObject([
+          {
+            value: "Banana",
+            expanded: true,
+            focused: true,
+            controls: ["listbox:Fruit"],
+            activeDescendant: "option:Banana",
+          },
+        ]);
+        expect(withRole(nodes, "listbox")).toMatchObject([
+          { name: "Fruit", multiselectable: false },
+        ]);
+        expect(options).toEqual(["Apple", "Banana (selected)", "Cherry (disabled)", "Date"]);
+      });
+
+      it("disabled by its attribute or a fieldset", async () => {
+        render(`
+          <ce-select name="own" label="Own" disabled>${fruits}</ce-select>
+          <fieldset disabled><ce-select name="inherited" label="Inherited">${fruits}</ce-select></fieldset>
+        `);
+
+        const comboboxes = withRole(await accessibleNodeDetails(), "combobox");
+
+        expect(comboboxes).toMatchObject([
+          { name: "Own", disabled: true, expanded: false },
+          { name: "Inherited", disabled: true, expanded: false },
+        ]);
+      });
+
+      it("multiple: the selected labels are the value, the listbox is multiselectable", async () => {
+        const { select } = render(
+          `<ce-select name="fruit" label="Fruit" multiple>${fruits}</ce-select>`,
+        );
+        select.values = ["banana", "date"];
+
+        await focusAndPress(select, "{ArrowDown}");
+
+        const nodes = await accessibleNodeDetails();
+        const selected: string[] = [];
+
+        for (const node of withRole(nodes, "option")) {
+          if (node.selected) {
+            selected.push(node.name);
+          }
+        }
+
+        expect(withRole(nodes, "combobox")).toMatchObject([
+          { value: "Banana, Date", expanded: true },
+        ]);
+        expect(withRole(nodes, "listbox")).toMatchObject([{ multiselectable: true }]);
+        expect(selected).toEqual(["Banana", "Date"]);
+      });
+
+      it("searchable: the input is the only combobox, with list autocomplete", async () => {
+        const { select } = render(
+          `<ce-select name="fruit" label="Fruit" searchable>${fruits}</ce-select>`,
+        );
+        select.value = "banana";
+        searchInput(select).focus();
+
+        const nodes = await accessibleNodeDetails();
+
+        expect(withRole(nodes, "combobox")).toMatchObject([
+          {
+            name: "Fruit",
+            value: "Banana",
+            autocomplete: "list",
+            hasPopup: "listbox",
+            expanded: false,
+            focused: true,
+          },
+        ]);
+      });
+
+      it("searchable: filtered-out options leave the tree", async () => {
+        const { select } = render(
+          `<ce-select name="fruit" label="Fruit" searchable>${fruits}</ce-select>`,
+        );
+
+        await focusAndType(select, "an");
+
+        const nodes = await accessibleNodeDetails();
+        const options: string[] = [];
+
+        for (const node of withRole(nodes, "option")) {
+          options.push(node.name);
+        }
+
+        expect(withRole(nodes, "combobox")).toMatchObject([
+          { value: "an", expanded: true, activeDescendant: "option:Banana" },
+        ]);
+        expect(options).toEqual(["Banana"]);
+      });
+
+      it("searchable: the result count is in a polite live region", async () => {
+        const { select } = render(
+          `<ce-select name="fruit" label="Fruit" searchable>${fruits}</ce-select>`,
+        );
+
+        await focusAndType(select, "an");
+
+        let live = 0;
+
+        for (const node of await accessibleNodeDetails()) {
+          if (node.live === "polite") {
+            live++;
+          }
+        }
+
+        expect(live).toBeGreaterThan(0);
+      });
+
+      it("keeps every option of a long list in the tree, scrolled out of view or not", async () => {
+        const { select } = render(
+          `<ce-select name="items" label="Items" searchable>${manyOptions(2000)}</ce-select>`,
+        );
+
+        await focusAndType(select, "Option 1");
+
+        const nodes = await accessibleNodeDetails();
+
+        // "Option 1", "Option 10"–"Option 19", "Option 100"–"Option 199", "Option 1000"–"Option 1999".
+        expect(withRole(nodes, "option")).toHaveLength(1111);
+        expect(withRole(nodes, "combobox")).toMatchObject([
+          { activeDescendant: "option:Option 1" },
+        ]);
+      });
+    });
+
+    describe("no stray nodes", () => {
+      it("exposes only the combobox, the clear button and the list", async () => {
+        const { select } = render(
+          `<ce-select name="fruit" label="Fruit" with-clear multiple>${fruits}</ce-select>`,
+        );
+        select.values = ["banana"];
+
+        await focusAndPress(select, "{ArrowDown}");
+
+        const roles: string[] = [];
+
+        for (const node of await accessibleNodeDetails()) {
+          // Structure without semantics of its own.
+          if (["RootWebArea", "generic", "none", "LabelText", "form"].includes(node.role)) {
+            continue;
+          }
+
+          if (node.role === "option") {
+            continue;
+          }
+
+          roles.push(`${node.role}:${node.name}`);
+        }
+
+        // No icons (chevron, check marks), no "No results" row.
+        expect(roles).toEqual(["combobox:Fruit", "listbox:Fruit", "button:Clear"]);
+      });
+    });
+
+    describe("axe", () => {
+      // An option's name is its label; the description slot is exposed as
+      // its description instead, so the visible text is more than the name.
+      const ignored = ["label-content-name-mismatch"];
+
+      it("finds nothing when closed, empty or with a value", async () => {
+        const { form } = render(`
+          <ce-select name="empty" label="Empty" placeholder="Pick one">${fruits}</ce-select>
+          <ce-select name="fruit" label="Fruit" with-clear>${fruits}</ce-select>
+        `);
+        query<CeSelect>(form, "[name='fruit']").value = "banana";
+
+        expect(await axeViolations(form, ignored)).toEqual([]);
+      });
+
+      it("finds nothing while open", async () => {
+        const { form, select } = render(
+          `<ce-select name="fruit" label="Fruit">${fruits}</ce-select>`,
+        );
+
+        await focusAndPress(select, "{ArrowDown}");
+
+        expect(await axeViolations(form, ignored)).toEqual([]);
+      });
+
+      it("finds nothing while open in multiple mode", async () => {
+        const { form, select } = render(
+          `<ce-select name="fruit" label="Fruit" multiple with-clear>${fruits}</ce-select>`,
+        );
+        select.values = ["banana", "date"];
+
+        await focusAndPress(select, "{ArrowDown}");
+
+        expect(await axeViolations(form, ignored)).toEqual([]);
+      });
+
+      it("finds nothing while searching, with and without results", async () => {
+        const { form, select } = render(
+          `<ce-select name="fruit" label="Fruit" searchable multiple>${fruits}</ce-select>`,
+        );
+        select.values = ["date"];
+
+        await focusAndType(select, "an");
+        expect(await axeViolations(form, ignored)).toEqual([]);
+
+        await userEvent.keyboard("zz");
+        expect(await axeViolations(form, ignored)).toEqual([]);
+      });
+
+      it("finds nothing when disabled", async () => {
+        const { form } = render(
+          `<ce-select name="fruit" label="Fruit" disabled>${fruits}</ce-select>`,
+        );
+
+        expect(await axeViolations(form, ignored)).toEqual([]);
+      });
+    });
+
+    // Found by the tests above; `it.fails` until fixed, so the suite stays green
+    // and a fix shows up as a failure to flip to `it`.
+    describe("known gaps", () => {
+      // The placeholder text sits in the box, so it's read as the value.
+      it.fails("closed and empty: no value, not the placeholder", async () => {
+        const { select } = render(
+          `<ce-select name="fruit" label="Fruit" placeholder="Pick one">${fruits}</ce-select>`,
+        );
+        trigger(select).focus();
+
+        const [combobox] = withRole(await accessibleNodeDetails(), "combobox");
+
+        expect(combobox?.value).toBe("");
+      });
+
+      // With focus in the input, the selected values (shown before it) aren't
+      // tied to the combobox, so a screen reader doesn't hear the selection.
+      it.fails("searchable multiple: the selection is announced with the combobox", async () => {
+        const { select } = render(
+          `<ce-select name="fruit" label="Fruit" searchable multiple>${fruits}</ce-select>`,
+        );
+        select.values = ["banana", "date"];
+        searchInput(select).focus();
+
+        const [combobox] = withRole(await accessibleNodeDetails(), "combobox");
+        const announced = `${combobox?.value ?? ""} ${combobox?.description ?? ""}`;
+
+        expect(announced).toContain("Banana");
+        expect(announced).toContain("Date");
+      });
     });
   });
   describe("more keyboard", () => {

@@ -8,6 +8,43 @@
     <script type="module" src="/src/ce-input/ce-input.ts"></script>
     <script type="module" src="/src/ce-icon/ce-icon.ts"></script>
     <script type="module" src="/src/ce-select/ce-select.ts"></script>
+    <style>
+      /* Before the components are defined, hold their default size so the
+         page doesn't shift when they upgrade: one field line (text, padding,
+         border), plus a label line when there is a label. Hidden rather than
+         transparent, so the raw options and slotted content can't be seen
+         or reached. Matches the components' own default styles. */
+      ce-input:not(:defined),
+      ce-select:not(:defined) {
+        display: inline-block;
+        box-sizing: border-box;
+        block-size: calc(1lh + 0.25em + 2px);
+        overflow: hidden;
+        visibility: hidden;
+        vertical-align: bottom;
+      }
+
+      ce-input:not(:defined) {
+        inline-size: 13em;
+      }
+
+      ce-select:not(:defined) {
+        inline-size: 10em;
+      }
+
+      :is(ce-input, ce-select):not(:defined):is([label], :has(> [slot="label"])) {
+        block-size: calc(2lh + 0.5em + 2px);
+      }
+
+      ce-icon:not(:defined) {
+        display: inline-block;
+        inline-size: 1em;
+        block-size: 1em;
+        overflow: hidden;
+        visibility: hidden;
+        vertical-align: -0.125em;
+      }
+    </style>
     <!-- Open Props: design tokens for the demo only. -->
     <!-- <link rel="stylesheet" href="https://unpkg.com/open-props@1.7.4/open-props.min.css" /> -->
     <!-- <link rel="stylesheet" href="/style.css" /> -->

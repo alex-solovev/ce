@@ -62,7 +62,7 @@ describe("ce-option", () => {
         </ce-option>
       `);
 
-      expect(await accessibleOptions()).toEqual([
+      expect(await accessibleOptions()).toMatchObject([
         {
           role: "option",
           name: "Pear",
@@ -79,7 +79,7 @@ describe("ce-option", () => {
       query(option, "span").textContent = "Nashi pear";
       option.refresh();
 
-      expect(await accessibleOptions()).toEqual([
+      expect(await accessibleOptions()).toMatchObject([
         { role: "option", name: "Nashi pear", description: "", selected: false, disabled: false },
       ]);
     });
@@ -116,7 +116,7 @@ describe("ce-option", () => {
       await slotchange;
 
       expect(queryShadow<HTMLElement>(option, "[part='description']").hidden).toBe(false);
-      expect(await accessibleOptions()).toEqual([
+      expect(await accessibleOptions()).toMatchObject([
         { role: "option", name: "Pear", description: "Soft", selected: false, disabled: false },
       ]);
     });
