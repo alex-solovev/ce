@@ -8,6 +8,7 @@
     <script type="module" src="/src/ce-input/ce-input.ts"></script>
     <script type="module" src="/src/ce-icon/ce-icon.ts"></script>
     <script type="module" src="/src/ce-select/ce-select.ts"></script>
+    <script type="module" src="/src/ce-tooltip/ce-tooltip.ts"></script>
     <style>
       /* Before the components are defined, hold their default size so the
          page doesn't shift when they upgrade: one field line (text, padding,
@@ -34,6 +35,11 @@
 
       :is(ce-input, ce-select):not(:defined):is([label], :has(> [slot="label"])) {
         block-size: calc(2lh + 0.5em + 2px);
+      }
+
+      /* Tooltip content is never part of the page flow. */
+      ce-tooltip:not(:defined) {
+        display: none;
       }
 
       ce-icon:not(:defined) {
@@ -193,6 +199,27 @@
       </p>
     </form>
     <p>Submitted: <output id="result" form="demo"></output></p>
+
+    <h2>ce-tooltip</h2>
+    <p>
+      <button type="button" id="tooltip-save">Save</button>
+      <ce-tooltip for="tooltip-save">Saves the draft</ce-tooltip>
+
+      <button type="button" id="tooltip-rich">Shortcuts</button>
+      <ce-tooltip for="tooltip-rich" placement="bottom">
+        Save with <kbd>Ctrl</kbd>+<kbd>S</kbd>, <strong>undo</strong> with <kbd>Ctrl</kbd>+<kbd
+          >Z</kbd
+        >
+      </ce-tooltip>
+
+      <button type="button" id="tooltip-right">Right</button>
+      <ce-tooltip for="tooltip-right" placement="right" show-delay="500">
+        Shows after 500ms, on the right
+      </ce-tooltip>
+
+      <button type="button" id="tooltip-disabled">Disabled tooltip</button>
+      <ce-tooltip for="tooltip-disabled" disabled>Never shows</ce-tooltip>
+    </p>
 
     <h2>ce-icon</h2>
     <p id="default-icons"></p>
